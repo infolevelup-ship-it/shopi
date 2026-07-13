@@ -1,0 +1,5 @@
+# Nunca commitear credenciales ni blueprints con tokens
+*.token
+.env
+secrets*
+blueprints_con_tokens/
