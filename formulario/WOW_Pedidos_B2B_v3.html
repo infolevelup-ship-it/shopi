@@ -687,10 +687,12 @@ function handleComprobanteFile(input){
   };
   reader.readAsDataURL(file);
 }
-// Sube el comprobante al hub como multipart/form-data (binario real → Make lo recibe como 1.file)
-// No bloquea el flujo del pedido.
+// Sube el comprobante al hub como multipart/form-data (binario real → Make lo recibe como 1.file),
+// sube el archivo a la Media Library de GHL y DEVUELVE la URL. Así la URL viaja dentro del pedido
+// y el workflow la guarda al crear la oportunidad (sin depender de búsquedas ni de timing).
+// Si algo falla, devuelve '' y el pedido continúa igual.
 async function subirComprobante(consecutivo){
-  if(!comprobanteData || !comprobanteData.file) return;
+  if(!comprobanteData || !comprobanteData.file) return '';
   try{
     const fd=new FormData();
     fd.append('action','comprobante');
@@ -698,8 +700,13 @@ async function subirComprobante(consecutivo){
     fd.append('filename',comprobanteData.filename);
     fd.append('file',comprobanteData.file,comprobanteData.filename); // binario real
     // NO fijar Content-Type: el navegador pone multipart/form-data con boundary
-    await fetch(CFG.WEBHOOK_HUB,{method:'POST',body:fd});
+    const ctrl=new AbortController();
+    const to=setTimeout(()=>ctrl.abort(),30000); // 30s máx: si la red falla, no congela el pedido
+    const res=await fetch(CFG.WEBHOOK_HUB,{method:'POST',body:fd,signal:ctrl.signal});
+    clearTimeout(to);
+    if(res.ok){ const d=await res.json().catch(()=>({})); return d.url||''; }
   }catch(e){ /* no bloquea el pedido */ }
+  return '';
 }
 
 // ═══════════════════════════════════════
@@ -1022,8 +1029,13 @@ async function submitOrder(){
   const ret=getRetencion();
   const vendNom=(()=>{const s=document.getElementById('vendedoraSelect');return s.value?s.options[s.selectedIndex].getAttribute('data-nombre'):'';})();
 
+  // Sube el comprobante PRIMERO y obtiene su URL, para mandarla dentro del pedido
+  // (así el workflow la guarda al crear la oportunidad, sin depender de búsquedas/timing).
+  const comprobanteUrl = await subirComprobante(consecutivoActual);
+
   const payload={
     consecutivo: consecutivoActual,
+    comprobante_url: comprobanteUrl,
     pipeline: pipelineCfg.pipeline, stage: pipelineCfg.stage, tipo_cliente_flujo: pipelineCfg.tipo_cliente_flujo,
     tipo_documento: document.getElementById('tipoDoc').value,
     cliente_nuevo: clientData.es_nuevo||false,
@@ -1058,7 +1070,6 @@ async function submitOrder(){
   try{
     const res=await fetch(CFG.WEBHOOK_GHL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('HTTP '+res.status);
-    subirComprobante(consecutivoActual); // no bloquea
     showToast('Enviado · '+consecutivoActual,'success');
     lastOrderSnapshot={ payload, items:Object.values(cart), selectedPriceList, fecha:new Date(), totals:t, consecutivo:consecutivoActual };
     document.getElementById('confirmNavRow').style.display='none';
@@ -1074,18 +1085,20 @@ async function actualizarPedido(){
   const btnHTML='<i class="ti ti-refresh" style="font-size:14px"></i>Actualizar pedido';
   setLoading('submitBtn',true,btnHTML);
   const t=computeTotals(), ret=getRetencion();
+  // En edición la oportunidad ya existe: subimos el comprobante (si hay) y su URL se guarda
+  // vía la ruta comprobante (búsqueda por consecutivo, que aquí sí encuentra la Opp).
+  const comprobanteUrl = await subirComprobante(editConsecutivo);
   const payload={
     action:'editar_pedido', opportunity_id:editOppId, consecutivo:editConsecutivo,
     productos:buildProductosText(), productos_siigo:buildProductosSiigo(),
     total:t.total, bruto:t.brutoRetail, subtotal:t.baseNetoTot, iva:t.ivaTot, descuentos:t.descRetail,
-    retencion_pct:ret.pct, retencion_valor:t.retTot,
+    retencion_pct:ret.pct, retencion_valor:t.retTot, comprobante_url:comprobanteUrl,
     forma_pago:document.getElementById('payMethod').value, lista_precio:selectedPriceList,
     notas:document.getElementById('notes').value
   };
   try{
     const res=await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('HTTP '+res.status);
-    subirComprobante(editConsecutivo);
     showToast('Pedido '+editConsecutivo+' actualizado','success');
     lastOrderSnapshot={ payload:{...payload, cliente:{nombre:clientData.name,nit:clientData.identification,ciudad:clientData.address?clientData.address.city_name:'',email:''}, vendedora:document.getElementById('vendedoraSelect').options[document.getElementById('vendedoraSelect').selectedIndex]?.getAttribute('data-nombre')||'', tipo_documento:document.getElementById('tipoDoc').value, pipeline:'Recompras B2B', stage:'(actualizado)'}, items:Object.values(cart), selectedPriceList, fecha:new Date(), totals:t, consecutivo:editConsecutivo };
     document.getElementById('confirmNavRow').style.display='none';
