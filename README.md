@@ -23,7 +23,7 @@ SIIGO factura electrónica (FV-1-N) — total exacto al centavo, marca Opp "Fact
 | Pieza | Ubicación | Estado |
 |---|---|---|
 | Formulario vendedoras | `formulario/WOW_Pedidos_B2B_v3.html` | ✅ Listo para pegar en GHL |
-| Escenario HUB (consecutivo, buscar, editar, comprobante, clientes Siigo) | Make `5110499` "WOW - Buscar Cliente Siigo" | ✅ Activo · ⚠️ ver comprobante |
+| Escenario HUB (consecutivo, buscar, editar, comprobante, clientes Siigo) | Make `5110499` "WOW - Buscar Cliente Siigo" | ✅ Activo · comprobante verificado E2E |
 | Escenario Facturación | Make `5589725` "WOW - Aprobar y Facturar (FIX)" | ✅ Activo |
 | Workflow crear pedido | GHL "Recibir Pedido B2B" | ✅ (mapeos en `docs/`) |
 | Webhook disparar factura | GHL "Disparar Facturación" | ⚠️ faltan 2 pares (ver abajo) |
@@ -53,13 +53,17 @@ Tasas Retefuente reales en el Siigo de WOW: **1 · 2 · 2.5 · 3.5 · 4 · 6 · 
 
 ## Pendientes de configuración (lado GHL / Make — UI)
 
-1. **Webhook GHL "Disparar Facturación"** → agregar 2 pares al Custom Data:
+1. **Webhook GHL "Disparar Facturación"** → agregar 2 pares al Custom Data (para que el
+   consecutivo y la URL del comprobante viajen a la factura de Siigo):
    - `consecutivo`     = `{{opportunity.consecutivo_pedido}}`
    - `comprobante_url` = `{{opportunity.comprobante_url}}`
-2. **Comprobante → módulo 34 de Make** (subida a la Media Library de GHL):
-   ver `docs/GUIA_COMPROBANTE_MAKE.md`. La subida multipart de archivos **no se puede
-   configurar por la API de Make** (limitación de Make); requiere un ajuste único en el editor
-   visual. El formulario y el resto del HUB ya están listos.
+2. **Escenario Facturación (5589725)** → agregar `comprobante_url` a las `observations`
+   de la factura Siigo (opcional, para que contabilidad vea el comprobante desde Siigo).
+
+> ✅ El **comprobante ya funciona end-to-end**: sube a la Media Library de GHL y su URL queda en
+> el campo `comprobante_url` de la oportunidad (imagen visible con un clic). El módulo 34 se
+> configuró en el editor visual de Make porque la subida multipart de archivos no es armable por la
+> API — detalle y estructura exacta en `docs/GUIA_COMPROBANTE_MAKE.md`.
 
 ## Seguridad
 
