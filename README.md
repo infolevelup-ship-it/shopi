@@ -57,8 +57,10 @@ Tasas Retefuente reales en el Siigo de WOW: **1 · 2 · 2.5 · 3.5 · 4 · 6 · 
    consecutivo y la URL del comprobante viajen a la factura de Siigo):
    - `consecutivo`     = `{{opportunity.consecutivo_pedido}}`
    - `comprobante_url` = `{{opportunity.comprobante_url}}`
-2. **Escenario Facturación (5589725)** → agregar `comprobante_url` a las `observations`
-   de la factura Siigo (opcional, para que contabilidad vea el comprobante desde Siigo).
+   > Único paso manual. Es un workflow de GHL (no editable por API).
+2. **Escenario Facturación (5589725)** → ✅ **ya está listo**: los módulos 6 y 7 ya incluyen
+   en las `observations` de la factura `Pedido {{consecutivo}} | … | Comprobante: {{comprobante_url}}`.
+   Solo falta que el webhook (#1) alimente esos dos valores.
 
 > ✅ El **comprobante ya funciona end-to-end**: sube a la Media Library de GHL y su URL queda en
 > el campo `comprobante_url` de la oportunidad (imagen visible con un clic). El módulo 34 se
