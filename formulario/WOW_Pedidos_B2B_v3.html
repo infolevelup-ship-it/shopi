@@ -220,10 +220,10 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       <div class="new-form" id="newClientForm">
         <div class="two-col">
           <div class="field"><label>Tipo de identificación <span class="req">*</span></label>
-            <select id="newIdType"><option value="31">NIT - Empresa</option><option value="13">CC - Cédula</option><option value="22">CE - Extranjería</option><option value="42">ID Extranjero</option></select>
+            <select id="newIdType" onchange="syncPersonType('id')"><option value="31">NIT - Empresa</option><option value="13">CC - Cédula</option><option value="22">CE - Extranjería</option><option value="42">ID Extranjero</option></select>
           </div>
           <div class="field"><label>Tipo <span class="req">*</span></label>
-            <select id="newPersonType"><option value="empresa">Empresa</option><option value="persona">Persona natural</option></select>
+            <select id="newPersonType" onchange="syncPersonType('pt')"><option value="empresa">Empresa</option><option value="persona">Persona natural</option></select>
           </div>
         </div>
         <div class="three-col">
@@ -231,8 +231,11 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
           <div class="field"><label>Dígito verif.</label><input type="text" id="newIdDv" placeholder="1" maxlength="1" inputmode="numeric"></div>
         </div>
         <div class="field"><label>Código sucursal</label><input type="text" id="newSucursal" placeholder="07" maxlength="4" inputmode="numeric"><div class="hint">Número asignado a cada vendedora</div></div>
-        <div class="field"><label>Razón social <span class="req">*</span></label><input type="text" id="newName" placeholder="Salón Pelos Lokos S.A.S"></div>
-        <div class="field"><label>Nombre comercial</label><input type="text" id="newCommercialName" placeholder="Peluquería El Loco"></div>
+        <div class="two-col" id="nombreRow">
+          <div class="field"><label id="newNameLabel">Razón social <span class="req">*</span></label><input type="text" id="newName" placeholder="Salón Pelos Lokos S.A.S"></div>
+          <div class="field" id="newLastNameWrap" style="display:none"><label>Apellidos <span class="req">*</span></label><input type="text" id="newLastName" placeholder="García Pérez"></div>
+        </div>
+        <div class="field"><label id="newCommercialLabel">Nombre comercial</label><input type="text" id="newCommercialName" placeholder="Peluquería El Loco"></div>
         <div class="two-col">
           <div class="field"><label>Departamento <span class="req">*</span></label><select id="newDepto" onchange="updateCities()"><option value="">Seleccionar...</option></select></div>
           <div class="field"><label>Ciudad / Municipio <span class="req">*</span></label><select id="newCity" disabled><option value="">Selecciona depto. primero</option></select></div>
@@ -312,6 +315,16 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       </div>
       <div id="cartContainer"><div class="cart-empty"><i class="ti ti-shopping-cart"></i>Sin productos agregados</div></div>
       <div id="totalsSection" style="display:none">
+        <div class="field" style="margin-bottom:12px">
+          <label>Retención en la fuente <span style="color:var(--text3);text-transform:none;font-weight:400">(según régimen del cliente)</span></label>
+          <select id="retencion" onchange="renderCart()">
+            <option value="0|0">No aplica</option>
+            <option value="2970|1">Retefuente 1%</option>
+            <option value="2969|2">Retefuente 2%</option>
+            <option value="2956|2.5">Retefuente 2.5%</option>
+          </select>
+          <div class="hint">Aplica solo si el cliente practica retención. Se descuenta del total y viaja a la factura de Siigo.</div>
+        </div>
         <div class="totals-box">
           <div class="total-line"><span>Subtotal bruto</span><span id="totBruto">$0</span></div>
           <div class="total-line"><span>Descuentos</span><span id="totDesc" style="color:var(--green)">-$0</span></div>
@@ -320,7 +333,7 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
           <div class="total-line ret" id="totRetLine" style="display:none"><span id="totRetLabel">Retención</span><span id="totRet">-$0</span></div>
           <div class="total-line final"><span>Total a pagar</span><span id="totFinal">$0</span></div>
         </div>
-        <div class="retention-note"><i class="ti ti-alert-triangle"></i><span>El total se calcula igual que Siigo (IVA por línea). Si el cliente tiene retención, elígela en el Paso 3 y se descuenta aquí.</span></div>
+        <div class="retention-note"><i class="ti ti-alert-triangle"></i><span>El total se calcula igual que Siigo (IVA por línea). La retención elegida arriba se descuenta del total.</span></div>
       </div>
     </div>
     <div class="nav-row">
@@ -336,24 +349,7 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       <div id="pipelineIndicator" class="pipeline-indicator" style="display:none"></div>
       <div class="two-col">
         <div class="field"><label>Tipo de documento</label><select id="tipoDoc"><option value="C-1-ORDEN DE PEDIDO">C-1 · Orden de pedido</option><option value="COTIZACION">Cotización</option></select></div>
-        <div class="field"><label>Forma de pago</label><select id="payMethod" onchange="togglePagoComprobante()"><option value="contado">Contado</option><option value="credito_30">Crédito 30 días</option><option value="credito_60">Crédito 60 días</option><option value="anticipado">Anticipado</option></select></div>
-      </div>
-      <!-- RETENCIÓN -->
-      <div class="field">
-        <label>Retención en la fuente <span style="color:var(--text3);text-transform:none;font-weight:400">(según régimen del cliente)</span></label>
-        <select id="retencion" onchange="renderCart()">
-          <option value="0|0">Sin retención</option>
-          <option value="2970|1">Retefuente 1%</option>
-          <option value="2969|2">Retefuente 2%</option>
-          <option value="2956|2.5">Retefuente 2.5%</option>
-          <option value="2967|3.5">Retefuente 3.5%</option>
-          <option value="2955|4">Retefuente 4%</option>
-          <option value="2954|6">Retefuente 6%</option>
-          <option value="2968|7">Retefuente 7%</option>
-          <option value="2953|10">Retefuente 10%</option>
-          <option value="2952|11">Retefuente 11%</option>
-        </select>
-        <div class="hint">Se descuenta del total y viaja a la factura de Siigo. Solo tasas válidas en Siigo.</div>
+        <div class="field"><label>Forma de pago</label><select id="payMethod" onchange="togglePagoComprobante()"><option value="contado">Contado</option><option value="credito_30">Crédito 30 días</option><option value="credito_60">Crédito 60 días</option></select></div>
       </div>
       <div class="field" id="comprobanteWrap" style="display:none">
         <label>Comprobante de pago <span style="color:var(--text3);text-transform:none;font-weight:400">(opcional)</span></label>
@@ -661,9 +657,10 @@ function updatePipelineIndicator() {
 // ═══════════════════════════════════════
 function togglePagoComprobante(){
   const wrap=document.getElementById('comprobanteWrap');
-  const esAnticipado=document.getElementById('payMethod').value==='anticipado';
-  wrap.style.display=esAnticipado?'block':'none';
-  if(!esAnticipado){
+  // Contado = pago inmediato → puede llevar comprobante. Crédito 30/60 no.
+  const llevaComprobante=document.getElementById('payMethod').value==='contado';
+  wrap.style.display=llevaComprobante?'block':'none';
+  if(!llevaComprobante){
     comprobanteData=null;
     document.getElementById('comprobanteFile').value='';
     document.getElementById('comprobantePreview').style.display='none';
@@ -716,7 +713,7 @@ function goStep(n){
   if(n > 1 && !clientData){ showToast('Primero busca o crea el cliente','error'); return; }
   if(n > 1 && !document.getElementById('vendedoraSelect').value){ showToast('Selecciona la vendedora responsable','error'); return; }
   if(n > 2 && Object.keys(cart).length === 0){ showToast('Agrega al menos un producto','error'); return; }
-  if(n === 3){ updatePipelineIndicator(); document.getElementById('listaResumen').value = selectedPriceList; }
+  if(n === 3){ updatePipelineIndicator(); document.getElementById('listaResumen').value = selectedPriceList; togglePagoComprobante(); }
   if(n === 4){
     buildSummary();
     const sb=document.getElementById('submitBtn');
@@ -799,13 +796,30 @@ async function searchClient(){
 }
 
 // ═══════════════════════════════════════
+// PERSONA NATURAL vs EMPRESA — etiqueta "Nombre" y Apellidos
+// ═══════════════════════════════════════
+function syncPersonType(source){
+  const idType=document.getElementById('newIdType').value;
+  const ptSel=document.getElementById('newPersonType');
+  // Si cambian el tipo de identificación, sincronizamos el tipo de persona
+  if(source==='id'){ ptSel.value = (idType==='31') ? 'empresa' : 'persona'; }
+  const esPersona = ptSel.value==='persona';
+  document.getElementById('newNameLabel').innerHTML = esPersona ? 'Nombres <span class="req">*</span>' : 'Razón social <span class="req">*</span>';
+  document.getElementById('newName').placeholder = esPersona ? 'María Fernanda' : 'Salón Pelos Lokos S.A.S';
+  document.getElementById('newLastNameWrap').style.display = esPersona ? 'block' : 'none';
+  document.getElementById('newCommercialLabel').textContent = esPersona ? 'Nombre del salón / comercial' : 'Nombre comercial';
+}
+
+// ═══════════════════════════════════════
 // CREAR CLIENTE NUEVO
 // ═══════════════════════════════════════
 function createClient(){
   const idType=document.getElementById('newIdType').value, personType=document.getElementById('newPersonType').value;
   const idNum=document.getElementById('newIdNum').value.trim(), idDv=document.getElementById('newIdDv').value.trim();
   const sucursal=document.getElementById('newSucursal').value.trim(), name=document.getElementById('newName').value.trim();
+  const lastName=document.getElementById('newLastName').value.trim();
   const commercialName=document.getElementById('newCommercialName').value.trim();
+  const esPersona=personType==='persona';
   const depto=document.getElementById('newDepto').value, city=document.getElementById('newCity').value;
   const address=document.getElementById('newAddress').value.trim();
   const contactFirst=document.getElementById('newContactFirst').value.trim(), contactLast=document.getElementById('newContactLast').value.trim();
@@ -816,11 +830,15 @@ function createClient(){
   const canal=document.getElementById('newCanal').value, cupoCredito=document.getElementById('newCupoCredito').value.trim();
   const web=document.getElementById('newWeb').value.trim();
   if(!idNum||!name||!email||!contactFirst||!depto||!city){ showToast('Completa los campos obligatorios (*)','error'); return; }
+  if(esPersona && !lastName){ showToast('Ingresa los apellidos del cliente','error'); return; }
   const deptoObj=COLOMBIA[depto];
   const stateCode=deptoObj?deptoObj.state_code:'', cityCode=(deptoObj&&deptoObj.cities[city])?deptoObj.cities[city]:'';
+  // Persona natural: nombre completo = Nombres + Apellidos (Siigo lo necesita partido)
+  const nombreCompleto = esPersona ? (name+' '+lastName).trim() : name;
   clientData={
     es_nuevo:true, person_type:personType, identification:idNum, id_type:idType, check_digit:idDv, branch_code:sucursal,
-    name, commercial_name:commercialName||name,
+    name:nombreCompleto, first_name:esPersona?name:'', last_name:esPersona?lastName:'',
+    commercial_name:commercialName||nombreCompleto,
     address:{ address, city_name:city, city, department:depto, state_code:stateCode, city_code:cityCode },
     contacts:[{first_name:contactFirst, last_name:contactLast, email, phone_number:phone, indicative:indic}],
     phones:phone?[{indicative:indic, number:phone}]:[], fiscal_responsibilities:[{id:fiscal, code:fiscal}],
@@ -1041,6 +1059,7 @@ async function submitOrder(){
     cliente_nuevo: clientData.es_nuevo||false,
     cliente:{
       id_siigo:clientData.id_siigo||clientData.id||'', nombre:clientData.name||'',
+      nombres:clientData.first_name||'', apellidos:clientData.last_name||'',
       nombre_comercial:clientData.commercial_name||'', nit:clientData.identification||'',
       id_type:clientData.id_type||'', check_digit:clientData.check_digit||'', branch_code:clientData.branch_code||'',
       tipo_persona:(clientData.id_type==='31'||clientData.person_type==='empresa')?'Company':'Person',
