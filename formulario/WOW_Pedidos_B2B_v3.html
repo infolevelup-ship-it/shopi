@@ -687,9 +687,11 @@ function getPipelineConfig() {
   if(mode==='edit') return { pipeline:'(edición)', stage:'(sin cambio)', tipo_cliente_flujo:'edicion' };
   if(canalGlobal==='B2C') return { pipeline:'B2C', stage:'Pedido nuevo', tipo_cliente_flujo:'b2c' };
   const esNuevo = clientData && clientData.es_nuevo === true;
+  // OJO: 'pipeline' es la LLAVE DE RUTEO que el router del workflow compara.
+  // Debe coincidir EXACTO con las ramas: Adquisición B2B / Recompras B2B / B2C.
   return {
-    pipeline: esNuevo ? 'Cliente Nuevo B2B' : 'Cliente Antiguo B2B',
-    stage:    esNuevo ? 'Prospecto nuevo'   : 'Pedido tomado',
+    pipeline: esNuevo ? 'Adquisición B2B' : 'Recompras B2B',
+    stage:    esNuevo ? 'Prospecto nuevo'  : 'Pedido tomado',
     tipo_cliente_flujo: esNuevo ? 'nuevo' : 'existente'
   };
 }
@@ -710,8 +712,8 @@ function updatePipelineIndicator() {
   const cfg=getPipelineConfig(), esNuevo=cfg.tipo_cliente_flujo==='nuevo';
   el.className='pipeline-indicator '+(esNuevo?'pipeline-new':'pipeline-recurrent');
   el.innerHTML = esNuevo
-    ? '<i class="ti ti-user-plus" style="font-size:14px"></i> Pipeline: <strong>Cliente Nuevo B2B</strong>&nbsp;·&nbsp;Prospecto nuevo'
-    : '<i class="ti ti-repeat" style="font-size:14px"></i> Pipeline: <strong>Cliente Antiguo B2B</strong>&nbsp;·&nbsp;Pedido tomado';
+    ? '<i class="ti ti-user-plus" style="font-size:14px"></i> B2B · <strong>Cliente nuevo</strong>&nbsp;·&nbsp;Prospecto nuevo'
+    : '<i class="ti ti-repeat" style="font-size:14px"></i> B2B · <strong>Recompra</strong>&nbsp;·&nbsp;Pedido tomado';
 }
 
 // ═══════════════════════════════════════
