@@ -171,6 +171,12 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
     <button class="mode-tab" id="modeEdit" onclick="switchMode('edit')"><i class="ti ti-search" style="font-size:15px"></i>Buscar / Editar</button>
   </div>
 
+  <!-- CANAL: B2B (salón/profesional) / B2C (consumidor final) -->
+  <div class="mode-tabs" id="canalTabs">
+    <button class="mode-tab active" id="canalB2B" onclick="setCanal('B2B')"><i class="ti ti-building-store" style="font-size:15px"></i>B2B · Salón/Pro</button>
+    <button class="mode-tab" id="canalB2C" onclick="setCanal('B2C')"><i class="ti ti-user" style="font-size:15px"></i>B2C · Consumidor</button>
+  </div>
+
   <!-- ============ MODO BUSCAR / EDITAR ============ -->
   <div id="editSearchPanel" style="display:none">
     <div class="card">
@@ -204,8 +210,11 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
         <button class="tab" id="tabNew" onclick="switchTab('new')">Cliente nuevo</button>
       </div>
       <div id="existingClient">
+        <button class="btn btn-blue" id="consumidorFinalBtn" onclick="setConsumidorFinal()" style="display:none;margin-bottom:12px">
+          <i class="ti ti-user-check" style="font-size:14px"></i>Consumidor final (venta sin datos)
+        </button>
         <div class="field">
-          <label>NIT del salón <span class="req">*</span></label>
+          <label>NIT / Cédula del cliente <span class="req">*</span></label>
           <div class="search-wrap">
             <i class="ti ti-search si"></i>
             <input type="text" id="nitInput" placeholder="Ej: 900538127" inputmode="numeric" onkeydown="if(event.key==='Enter')searchClient()">
@@ -315,7 +324,7 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       </div>
       <div id="cartContainer"><div class="cart-empty"><i class="ti ti-shopping-cart"></i>Sin productos agregados</div></div>
       <div id="totalsSection" style="display:none">
-        <div class="field" style="margin-bottom:12px">
+        <div class="field" id="retencionField" style="margin-bottom:12px">
           <label>Retención en la fuente <span style="color:var(--text3);text-transform:none;font-weight:400">(según régimen del cliente)</span></label>
           <select id="retencion" onchange="renderCart()">
             <option value="0|0">No aplica</option>
@@ -406,6 +415,7 @@ const STAGES_BLOQUEADAS = ['Aprobado para facturar','Facturado','Cotización apr
 // ESTADO GLOBAL
 // ═══════════════════════════════════════
 let mode = 'new';           // 'new' | 'edit'
+let canalGlobal = 'B2B';    // 'B2B' | 'B2C'
 let editOppId = null;       // id de la oportunidad en edición
 let editConsecutivo = null; // consecutivo cargado en edición
 let clientData = null;
@@ -489,6 +499,52 @@ function computeTotals(){
   const total = r2(totalConIva - retTot);
   return { brutoRetail, descRetail, baseNetoTot:r2(baseNetoTot), ivaTot:r2(ivaTot),
            retTot:r2(retTot), totalConIva:r2(totalConIva), total, ret };
+}
+
+// ═══════════════════════════════════════
+// CANAL B2B / B2C
+// ═══════════════════════════════════════
+function setCanal(c){
+  canalGlobal = c;
+  const esB2C = c==='B2C';
+  document.getElementById('canalB2B').className = 'mode-tab'+(esB2C?'':' active');
+  document.getElementById('canalB2C').className = 'mode-tab'+(esB2C?' active':'');
+  // Botón "Consumidor final" (solo B2C)
+  const cf=document.getElementById('consumidorFinalBtn'); if(cf) cf.style.display=esB2C?'flex':'none';
+  // Retención: en B2C no aplica → ocultar y forzar "No aplica"
+  const retF=document.getElementById('retencionField'); if(retF) retF.style.display=esB2C?'none':'';
+  if(esB2C){ const r=document.getElementById('retencion'); if(r) r.value='0|0'; }
+  // Forma de pago: en B2C solo Contado (ocultar crédito)
+  ['credito_30','credito_60'].forEach(v=>{
+    const opt=document.querySelector('#payMethod option[value="'+v+'"]');
+    if(opt){ opt.hidden=esB2C; opt.disabled=esB2C; }
+  });
+  if(esB2C) document.getElementById('payMethod').value='contado';
+  // Precio por defecto Público en B2C
+  if(esB2C) setPriceList('Publico');
+  // Canal del pedido y del cliente nuevo
+  const cp=document.getElementById('canalPedido'); if(cp) cp.value=c;
+  const nc=document.getElementById('newCanal'); if(nc) nc.value=c;
+  if(Object.keys(cart).length>0) renderCart();
+}
+
+// Selecciona "Consumidor final" (venta B2C sin datos) → NIT genérico 222222222222
+function setConsumidorFinal(){
+  clientData={
+    es_nuevo:false, identification:'222222222222', id_type:'13', person_type:'persona',
+    name:'CONSUMIDOR FINAL', commercial_name:'CONSUMIDOR FINAL',
+    address:{address:'',city_name:'',department:'',state_code:'',city_code:''},
+    contacts:[{email:''}], phones:[], tipo_cliente:'PUBLICO', canal:'B2C', tipo_compra:'RETAIL'
+  };
+  document.getElementById('nitInput').value='222222222222';
+  const info=document.getElementById('clientInfo');
+  info.className='client-info show';
+  info.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    +'<span style="font-size:13px;font-weight:500">CONSUMIDOR FINAL</span>'
+    +'<span class="status-badge status-ok"><i class="ti ti-user-check"></i> B2C</span></div>'
+    +'<p style="font-size:11px;color:var(--text2)">Venta a consumidor final (NIT 222222222222) · precio Público. Si tu Siigo no lo tiene creado, créalo una vez.</p>';
+  setPriceList('Publico');
+  showToast('Consumidor final · B2C','success');
 }
 
 // ═══════════════════════════════════════
@@ -629,10 +685,11 @@ function parseProductosText(txt){
 // ═══════════════════════════════════════
 function getPipelineConfig() {
   if(mode==='edit') return { pipeline:'(edición)', stage:'(sin cambio)', tipo_cliente_flujo:'edicion' };
+  if(canalGlobal==='B2C') return { pipeline:'B2C', stage:'Pedido nuevo', tipo_cliente_flujo:'b2c' };
   const esNuevo = clientData && clientData.es_nuevo === true;
   return {
-    pipeline: esNuevo ? 'Adquisición B2B' : 'Recompras B2B',
-    stage:    esNuevo ? 'Prospecto nuevo'  : 'Pedido tomado',
+    pipeline: esNuevo ? 'Cliente Nuevo B2B' : 'Cliente Antiguo B2B',
+    stage:    esNuevo ? 'Prospecto nuevo'   : 'Pedido tomado',
     tipo_cliente_flujo: esNuevo ? 'nuevo' : 'existente'
   };
 }
@@ -645,11 +702,16 @@ function updatePipelineIndicator() {
     el.innerHTML='<i class="ti ti-edit" style="font-size:14px"></i> Editando pedido <strong>'+(editConsecutivo||'')+'</strong> — se actualizará la oportunidad existente';
     return;
   }
+  if(canalGlobal==='B2C'){
+    el.className='pipeline-indicator pipeline-recurrent';
+    el.innerHTML='<i class="ti ti-user" style="font-size:14px"></i> Pipeline: <strong>B2C</strong>&nbsp;·&nbsp;Pedido nuevo (consumidor final)';
+    return;
+  }
   const cfg=getPipelineConfig(), esNuevo=cfg.tipo_cliente_flujo==='nuevo';
   el.className='pipeline-indicator '+(esNuevo?'pipeline-new':'pipeline-recurrent');
   el.innerHTML = esNuevo
-    ? '<i class="ti ti-user-plus" style="font-size:14px"></i> Pipeline: <strong>Adquisición B2B</strong>&nbsp;·&nbsp;Prospecto nuevo'
-    : '<i class="ti ti-repeat" style="font-size:14px"></i> Pipeline: <strong>Recompras B2B</strong>&nbsp;·&nbsp;Pedido tomado';
+    ? '<i class="ti ti-user-plus" style="font-size:14px"></i> Pipeline: <strong>Cliente Nuevo B2B</strong>&nbsp;·&nbsp;Prospecto nuevo'
+    : '<i class="ti ti-repeat" style="font-size:14px"></i> Pipeline: <strong>Cliente Antiguo B2B</strong>&nbsp;·&nbsp;Pedido tomado';
 }
 
 // ═══════════════════════════════════════
@@ -1054,6 +1116,7 @@ async function submitOrder(){
   const payload={
     consecutivo: consecutivoActual,
     comprobante_url: comprobanteUrl,
+    canal: canalGlobal,   // 'B2B' | 'B2C' → el workflow rutea el pipeline por esto
     pipeline: pipelineCfg.pipeline, stage: pipelineCfg.stage, tipo_cliente_flujo: pipelineCfg.tipo_cliente_flujo,
     tipo_documento: document.getElementById('tipoDoc').value,
     cliente_nuevo: clientData.es_nuevo||false,
@@ -1252,7 +1315,9 @@ function resetForm(){
   document.getElementById('discardBtn').style.display='flex';
   const sb=document.getElementById('submitBtn'); if(sb){ sb.disabled=false; sb.innerHTML='<i class="ti ti-send" style="font-size:14px"></i>Enviar a GHL'; }
   switchTab('existing');
-  setPriceList('Publico'); renderCart(); goStep(1);
+  setPriceList('Publico'); renderCart();
+  setCanal(canalGlobal);   // re-aplica el estado del canal (retención/crédito/consumidor final)
+  goStep(1);
 }
 // Ajusta el botón de envío según modo al entrar al paso 4
 const _origGoStep=goStep;
