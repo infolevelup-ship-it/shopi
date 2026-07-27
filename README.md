@@ -67,6 +67,17 @@ Tasas Retefuente reales en el Siigo de WOW: **1 · 2 · 2.5 · 3.5 · 4 · 6 · 
 > configuró en el editor visual de Make porque la subida multipart de archivos no es armable por la
 > API — detalle y estructura exacta en `docs/GUIA_COMPROBANTE_MAKE.md`.
 
+### Filtro humano + candado anti-doble-factura
+- La factura se dispara cuando una persona mueve la oportunidad a la etapa **"Facturado"**
+  (revisión humana). La etapa previa "Aprobado para facturar" se usa como **cola de revisión**
+  (renombrable a "Revisar para facturar").
+- **Candado (ya aplicado en Make, escenario 5589725):** ambas rutas del router solo facturan si
+  `estado_facturacion ≠ "Facturada"`. Verificado: un re-disparo con Estado=Facturada se bloquea
+  (no crea factura). Esto evita facturas dobles si alguien reingresa la oportunidad a "Facturado".
+- **Requiere (webhook GHL "Disparar Facturación"):** agregar el par de Custom Data
+  `estado_facturacion` = `{{opportunity.estado_facturacin}}` (ojo: la llave nativa va sin la "ó").
+  Sin ese par el candado queda inactivo (no bloquea de más, pero tampoco atrapa el re-disparo).
+
 ## Seguridad
 
 Antes de producción, **rotar** todas las credenciales que se usaron en desarrollo:
