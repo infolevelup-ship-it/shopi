@@ -358,7 +358,21 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       <div id="pipelineIndicator" class="pipeline-indicator" style="display:none"></div>
       <div class="two-col">
         <div class="field"><label>Tipo de documento</label><select id="tipoDoc"><option value="C-1-ORDEN DE PEDIDO">C-1 · Orden de pedido</option><option value="COTIZACION">Cotización</option></select></div>
-        <div class="field"><label>Forma de pago</label><select id="payMethod" onchange="togglePagoComprobante()"><option value="contado">Contado</option><option value="credito_30">Crédito 30 días</option><option value="credito_60">Crédito 60 días</option></select></div>
+        <div class="field"><label>Forma de pago</label><select id="payMethod" onchange="togglePagoComprobante()"><option value="contado">Contado</option><option value="credito_15">Crédito 15 días</option><option value="credito_30">Crédito 30 días</option><option value="credito_45">Crédito 45 días</option><option value="credito_60">Crédito 60 días</option></select></div>
+      </div>
+      <div class="field" id="medioPagoWrap" style="display:none">
+        <label>Medio de pago <span class="req">*</span></label>
+        <select id="medioPago">
+          <option value="efectivo">Efectivo</option>
+          <option value="addi">ADDI</option>
+          <option value="bancolombia">Bancolombia</option>
+          <option value="banco_davivienda">Banco Davivienda</option>
+          <option value="davivienda_ahorros">Davivienda Ahorros</option>
+          <option value="payu_pasarela">Payu pasarela de pagos</option>
+          <option value="payu_olaplex">Payu Olaplex</option>
+          <option value="recaudo_coordinadora">Recaudo Coordinadora</option>
+        </select>
+        <div class="hint">Por dónde llegó el pago — viaja a Siigo como el método de pago real de la factura</div>
       </div>
       <div class="field" id="comprobanteWrap" style="display:none">
         <label>Comprobante de pago <span style="color:var(--text3);text-transform:none;font-weight:400">(opcional)</span></label>
@@ -730,9 +744,12 @@ function updatePipelineIndicator() {
 // ═══════════════════════════════════════
 function togglePagoComprobante(){
   const wrap=document.getElementById('comprobanteWrap');
-  // Contado = pago inmediato → puede llevar comprobante. Crédito 30/60 no.
+  const medioWrap=document.getElementById('medioPagoWrap');
+  // Contado = pago inmediato → puede llevar comprobante y pide el medio real de pago.
+  // Crédito (15/30/45/60 días) no lleva ninguno de los dos (el dinero aún no llegó).
   const llevaComprobante=document.getElementById('payMethod').value==='contado';
   wrap.style.display=llevaComprobante?'block':'none';
+  medioWrap.style.display=llevaComprobante?'block':'none';
   if(!llevaComprobante){
     comprobanteData=null;
     document.getElementById('comprobanteFile').value='';
@@ -1172,6 +1189,7 @@ async function submitOrder(){
     total:t.total, subtotal:t.baseNetoTot, iva:t.ivaTot, descuentos:t.descRetail,
     retencion_pct:ret.pct, retencion_valor:t.retTot, retencion_tax_id:ret.taxId,
     forma_pago:document.getElementById('payMethod').value,
+    medio_pago:document.getElementById('payMethod').value==='contado'?document.getElementById('medioPago').value:'',
     comprobante_nombre:comprobanteData?comprobanteData.filename:'',
     vendedora_id:document.getElementById('vendedoraSelect').value, vendedora:vendNom,
     notas:document.getElementById('notes').value, fecha:new Date().toISOString()
@@ -1202,7 +1220,9 @@ async function actualizarPedido(){
     productos:buildProductosText(), productos_siigo:buildProductosSiigo(),
     total:t.total, bruto:t.brutoRetail, subtotal:t.baseNetoTot, iva:t.ivaTot, descuentos:t.descRetail,
     retencion_pct:ret.pct, retencion_valor:t.retTot, comprobante_url:comprobanteUrl,
-    forma_pago:document.getElementById('payMethod').value, lista_precio:selectedPriceList,
+    forma_pago:document.getElementById('payMethod').value,
+    medio_pago:document.getElementById('payMethod').value==='contado'?document.getElementById('medioPago').value:'',
+    lista_precio:selectedPriceList,
     notas:document.getElementById('notes').value
   };
   try{
