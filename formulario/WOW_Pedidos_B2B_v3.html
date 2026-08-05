@@ -483,7 +483,11 @@ function computeTotals(){
   let brutoRetail=0, descRetail=0, baseNetoTot=0, ivaTot=0, retTot=0, totalConIva=0;
   items.forEach(item=>{
     const up = getItemPrice(item);                 // precio con IVA (retail que ve la vendedora)
-    const tasaIva = (item.tax_pct||19)/100;
+    // Solo aplica IVA si la línea tiene tax_id (igual que buildProductosSiigo, que solo manda
+    // el impuesto a Siigo cuando i.tax_id existe). Líneas sin impuesto (ej. Flete Nacional) van
+    // sin IVA — si no, el total del formulario queda más alto que el que calcula Siigo y la
+    // factura se rechaza por "invalid_total_payments".
+    const tasaIva = item.tax_id ? (item.tax_pct||19)/100 : 0;
     const base = r2(up/(1+tasaIva));               // precio base 2 dec (lo que va a Siigo)
     const disc = item.disc||0;
     const discVal = discValLinea(base, item.qty, disc);      // descuento $ de la línea
@@ -1103,8 +1107,8 @@ function buildSummary(){
 function buildProductosSiigo(){
   const ret=getRetencion(), items=cart;
   return JSON.stringify(items.map(i=>{
-    const up=getItemPrice(i), tasaIva=(i.tax_pct||19)/100;
-    const base=r2(up/(1+tasaIva));      // precio SIN IVA (Siigo le suma el IVA)
+    const up=getItemPrice(i), tasaIva=i.tax_id?(i.tax_pct||19)/100:0;
+    const base=r2(up/(1+tasaIva));      // precio SIN IVA (Siigo le suma el IVA); sin tax_id, precio pleno sin reducir
     const discVal=discValLinea(base, i.qty, i.disc); // descuento en PESOS (Siigo lo resta del total línea)
     const taxes=[];
     if(i.tax_id) taxes.push({id:i.tax_id});
