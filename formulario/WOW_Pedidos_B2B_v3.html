@@ -859,9 +859,13 @@ async function searchClient(){
       const c=results[0];
       clientData={ ...c, es_nuevo:false };
       const addr=clientData.address||{};
-      const cityName=addr.city_name||addr.city||'', deptoName=addr.department||addr.state||'';
-      if(!addr.state_code && deptoName && COLOMBIA[deptoName]) addr.state_code=COLOMBIA[deptoName].state_code;
-      if(!addr.city_code && deptoName && cityName && COLOMBIA[deptoName] && COLOMBIA[deptoName].cities[cityName]) addr.city_code=COLOMBIA[deptoName].cities[cityName];
+      // Siigo a veces devuelve address.city como OBJETO anidado {city_name, state_name, city_code,
+      // state_code}, no como texto — hay que desempaquetarlo o queda "[object Object]" en pantalla.
+      const cityObj = (addr.city && typeof addr.city==='object') ? addr.city : null;
+      const cityName = addr.city_name || (cityObj ? cityObj.city_name : (typeof addr.city==='string'?addr.city:'')) || '';
+      const deptoName = addr.department || (cityObj ? cityObj.state_name : addr.state) || '';
+      if(!addr.state_code) addr.state_code = (cityObj && cityObj.state_code) || (deptoName && COLOMBIA[deptoName] ? COLOMBIA[deptoName].state_code : '');
+      if(!addr.city_code) addr.city_code = (cityObj && cityObj.city_code) || (deptoName && cityName && COLOMBIA[deptoName] && COLOMBIA[deptoName].cities[cityName] ? COLOMBIA[deptoName].cities[cityName] : '');
       addr.department=deptoName; addr.city_name=cityName; clientData.address=addr;
       const tipoCompra=c.tipo_compra||'', tipoCliente=c.tipo_cliente||'', canal=c.canal||'';
       const addrTxt=c.address?(c.address.address||''):'', city=cityName;
@@ -1229,7 +1233,15 @@ async function actualizarPedido(){
     const res=await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('HTTP '+res.status);
     showToast('Pedido '+editConsecutivo+' actualizado','success');
-    lastOrderSnapshot={ payload:{...payload, cliente:{nombre:clientData.name,nit:clientData.identification,ciudad:clientData.address?clientData.address.city_name:'',email:''}, vendedora:document.getElementById('vendedoraSelect').options[document.getElementById('vendedoraSelect').selectedIndex]?.getAttribute('data-nombre')||'', tipo_documento:document.getElementById('tipoDoc').value, pipeline:'Recompras B2B', stage:'(actualizado)'}, items:cart, selectedPriceList, fecha:new Date(), totals:t, consecutivo:editConsecutivo };
+    lastOrderSnapshot={ payload:{...payload, cliente:{
+      nombre:clientData.name, nombre_comercial:clientData.commercial_name||'', nit:clientData.identification,
+      ciudad:clientData.address?clientData.address.city_name:'', departamento:clientData.address?clientData.address.department:'',
+      direccion:clientData.address?clientData.address.address:'',
+      telefono:(clientData.phones&&clientData.phones[0])?clientData.phones[0].number:'',
+      contact_first:(clientData.contacts&&clientData.contacts[0])?clientData.contacts[0].first_name:'',
+      contact_last:(clientData.contacts&&clientData.contacts[0])?clientData.contacts[0].last_name:'',
+      email:(clientData.contacts&&clientData.contacts[0])?clientData.contacts[0].email:''
+    }, vendedora:document.getElementById('vendedoraSelect').options[document.getElementById('vendedoraSelect').selectedIndex]?.getAttribute('data-nombre')||'', tipo_documento:document.getElementById('tipoDoc').value, pipeline:'Recompras B2B', stage:'(actualizado)'}, items:cart, selectedPriceList, fecha:new Date(), totals:t, consecutivo:editConsecutivo };
     document.getElementById('confirmNavRow').style.display='none';
     document.getElementById('downloadBtn').style.display='flex';
     document.getElementById('discardBtn').style.display='none';
@@ -1265,7 +1277,10 @@ function downloadOrderPDF(){
     +'<div class="section"><div class="section-title">Cliente</div>'
     +'<div class="info-row"><span>Razón social</span><span>'+(c.nombre_comercial||c.nombre)+'</span></div>'
     +'<div class="info-row"><span>NIT</span><span>'+c.nit+'</span></div>'
-    +(c.ciudad?'<div class="info-row"><span>Ciudad</span><span>'+c.ciudad+'</span></div>':'')
+    +((c.contact_first||c.contact_last)?'<div class="info-row"><span>Contacto</span><span>'+((c.contact_first||'')+' '+(c.contact_last||'')).trim()+'</span></div>':'')
+    +(c.direccion?'<div class="info-row"><span>Dirección</span><span>'+c.direccion+'</span></div>':'')
+    +(c.ciudad?'<div class="info-row"><span>Ciudad</span><span>'+c.ciudad+(c.departamento?' ('+c.departamento+')':'')+'</span></div>':'')
+    +(c.telefono?'<div class="info-row"><span>Teléfono</span><span>'+c.telefono+'</span></div>':'')
     +(c.email?'<div class="info-row"><span>Email facturación</span><span>'+c.email+'</span></div>':'')
     +'<div class="info-row"><span>Vendedora</span><span>'+payload.vendedora+'</span></div>'
     +'<div class="info-row"><span>Lista de precio</span><span>'+lista+'</span></div>'
