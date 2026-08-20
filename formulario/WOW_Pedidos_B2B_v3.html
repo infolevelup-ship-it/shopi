@@ -191,6 +191,7 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       </div>
       <button class="btn btn-blue" id="buscarPedidoBtn" onclick="buscarPedido()"><i class="ti ti-search" style="font-size:14px"></i>Buscar pedido</button>
       <div class="client-info" id="pedidoInfo"></div>
+      <button class="btn btn-gold" id="downloadBtnSearch" onclick="downloadOrderPDF()" style="display:none;margin-top:10px"><i class="ti ti-download" style="font-size:14px"></i>Descargar PDF del pedido</button>
     </div>
   </div>
 
@@ -596,6 +597,7 @@ async function buscarPedido(){
   const info=document.getElementById('pedidoInfo');
   info.className='client-info show';
   info.innerHTML='<div style="text-align:center;padding:12px;color:var(--text2);font-size:12px"><span class="loading-spin loading-spin-dark"></span> Buscando en GHL...</div>';
+  document.getElementById('downloadBtnSearch').style.display='none';
   try{
     const res=await fetch(CFG.WEBHOOK_HUB+'?action=buscar_pedido&consecutivo='+encodeURIComponent(cons));
     if(!res.ok) throw new Error('HTTP '+res.status);
@@ -634,14 +636,8 @@ function loadPedidoIntoForm(opp){
   const bloqueado = STAGE_IDS_BLOQUEADAS.includes(stageId)
                     || (cf['KE7YaW6kKHPbcjUsJPzs']==='Facturada');
   const info=document.getElementById('pedidoInfo');
-  if(bloqueado){
-    info.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-      +'<span style="font-size:13px;font-weight:500">'+opp.name+'</span>'
-      +'<span class="status-badge status-err"><i class="ti ti-lock"></i> Ya facturado</span></div>'
-      +'<p style="font-size:12px;color:var(--text2)">Este pedido ya pasó a facturación y no se puede editar. Crea un <strong>pedido nuevo</strong> si el cliente necesita algo adicional.</p>';
-    return;
-  }
-  // Cargar estado de edición
+  // Cargar estado del pedido — SIEMPRE (editable o bloqueado), porque el PDF debe poder
+  // descargarse en ambos casos: quien revisa/factura necesita verlo aunque ya no sea editable.
   editOppId = opp.id;
   editConsecutivo = cf['yokg670E7P1BHLjCrukL'] || document.getElementById('consecInput').value.trim();
   // Cliente (marcamos existente por NIT)
@@ -662,21 +658,50 @@ function loadPedidoIntoForm(opp){
   setPriceList(selectedPriceList);
   // Restaurar retención guardada
   const retPctSaved = parseFloat(cf['HFgDz85rHZy4YWAfs1Tu'])||0;
+  const selRet=document.getElementById('retencion');
+  selRet.selectedIndex = 0;
   if(retPctSaved>0){
-    const selRet=document.getElementById('retencion');
     for(let i=0;i<selRet.options.length;i++){ if(parseFloat(selRet.options[i].value.split('|')[1])===retPctSaved){ selRet.selectedIndex=i; break; } }
   }
   document.getElementById('notes').value = cf['YmSWBgdzxMvZ3wYSqvzh'] || '';
   document.getElementById('payMethod').value = cf['Tn6lE0aMXS9wA2646dKa'] || 'contado';
-  // vendedora
+  const vendNombre = cf['q9moOmN5Aph4RTHfYPGT'] || '';
   if(opp.assignedTo){
     const s=document.getElementById('vendedoraSelect');
     for(let i=0;i<s.options.length;i++){ if(s.options[i].value===opp.assignedTo){ s.selectedIndex=i; updateVendedora(); break; } }
   }
+
+  // Snapshot para el PDF — disponible de inmediato, sin necesidad de editar ni enviar nada.
+  const t = computeTotals();
+  lastOrderSnapshot = {
+    payload: {
+      tipo_documento: document.getElementById('tipoDoc').value,
+      vendedora: vendNombre,
+      forma_pago: document.getElementById('payMethod').value,
+      notas: document.getElementById('notes').value,
+      cliente: {
+        nombre: clientData.name, nombre_comercial: clientData.commercial_name||'', nit: clientData.identification,
+        ciudad: clientData.address?clientData.address.city_name:'',
+        direccion: clientData.address?clientData.address.address:'',
+        telefono: (clientData.phones&&clientData.phones[0])?clientData.phones[0].number:'',
+        email: (clientData.contacts&&clientData.contacts[0])?clientData.contacts[0].email:''
+      }
+    },
+    items: cart, selectedPriceList, fecha: new Date(), totals: t, consecutivo: editConsecutivo
+  };
+  document.getElementById('downloadBtnSearch').style.display='flex';
+
+  if(bloqueado){
+    info.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span style="font-size:13px;font-weight:500">'+opp.name+'</span>'
+      +'<span class="status-badge status-err"><i class="ti ti-lock"></i> Ya facturado</span></div>'
+      +'<p style="font-size:12px;color:var(--text2)">Este pedido ya pasó a facturación y no se puede editar. Crea un <strong>pedido nuevo</strong> si el cliente necesita algo adicional. Puedes descargar el PDF abajo para revisarlo.</p>';
+    return;
+  }
   info.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
     +'<span style="font-size:13px;font-weight:500">'+opp.name+'</span>'
     +'<span class="status-badge status-ok"><i class="ti ti-edit"></i> Editable</span></div>'
-    +'<p style="font-size:11px;color:var(--text2)">Pedido cargado. Modifica productos/cantidades y presiona <strong>Actualizar pedido</strong> en el paso 4.</p>';
+    +'<p style="font-size:11px;color:var(--text2)">Pedido cargado. Descarga el PDF abajo para revisarlo, o modifica productos/cantidades y presiona <strong>Actualizar pedido</strong> en el paso 4.</p>';
   document.getElementById('stepsBar').style.display='flex';
   document.getElementById('sec1').style.display='';
   renderCart();
@@ -1372,6 +1397,7 @@ function resetForm(){
   document.getElementById('comprobantePreview').innerHTML='';
   document.getElementById('confirmNavRow').style.display='flex';
   document.getElementById('downloadBtn').style.display='none';
+  document.getElementById('downloadBtnSearch').style.display='none';
   document.getElementById('discardBtn').style.display='flex';
   const sb=document.getElementById('submitBtn'); if(sb){ sb.disabled=false; sb.innerHTML='<i class="ti ti-send" style="font-size:14px"></i>Enviar a GHL'; }
   switchTab('existing');
