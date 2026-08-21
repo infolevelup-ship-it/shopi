@@ -169,6 +169,7 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
   <div class="mode-tabs">
     <button class="mode-tab active" id="modeNew" onclick="switchMode('new')"><i class="ti ti-file-plus" style="font-size:15px"></i>Nuevo pedido</button>
     <button class="mode-tab" id="modeEdit" onclick="switchMode('edit')"><i class="ti ti-search" style="font-size:15px"></i>Buscar / Editar</button>
+    <button class="mode-tab" id="modeProspecto" onclick="switchMode('prospecto')"><i class="ti ti-walk" style="font-size:15px"></i>Prospecto</button>
   </div>
 
   <!-- CANAL: B2B (salón/profesional) / B2C (consumidor final) -->
@@ -192,6 +193,34 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       <button class="btn btn-blue" id="buscarPedidoBtn" onclick="buscarPedido()"><i class="ti ti-search" style="font-size:14px"></i>Buscar pedido</button>
       <div class="client-info" id="pedidoInfo"></div>
       <button class="btn btn-gold" id="downloadBtnSearch" onclick="downloadOrderPDF()" style="display:none;margin-top:10px"><i class="ti ti-download" style="font-size:14px"></i>Descargar PDF del pedido</button>
+    </div>
+  </div>
+
+  <!-- ============ MODO PROSPECTO (visita, sin pedido) ============ -->
+  <div id="prospectoPanel" style="display:none">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-walk"></i> Registrar visita a prospecto</div>
+      <div class="field"><label>Nombre del contacto <span class="req">*</span></label><input type="text" id="prospNombre" placeholder="Ej: Juan Pérez"></div>
+      <div class="field"><label>Salón / Negocio</label><input type="text" id="prospNombreComercial" placeholder="Ej: Salón Rojo"></div>
+      <div class="two-col">
+        <div class="field"><label>Teléfono</label><input type="text" id="prospTelefono" placeholder="3001234567"></div>
+        <div class="field"><label>Ciudad</label><input type="text" id="prospCiudad" placeholder="Ej: Bogotá"></div>
+      </div>
+      <div class="field">
+        <label>Tipo de visita <span class="req">*</span></label>
+        <select id="prospTipoVisita">
+          <option value="primera">Primera visita</option>
+          <option value="segunda">Segunda visita</option>
+        </select>
+        <div class="hint">"Segunda visita" busca el prospecto por nombre y lo mueve de etapa — usa el mismo nombre de la primera vez</div>
+      </div>
+      <div class="field"><label>Producto(s) presentado(s)</label><input type="text" id="prospProducto" placeholder="Ej: Kit Healthy Hair Discovery"></div>
+      <div class="field">
+        <label>Vendedora <span class="req">*</span></label>
+        <select id="prospVendedora"><option value="">Seleccionar</option><option value="0b6EU5KbJBc69PazOwCR" data-nombre="Karina Noriega">Karina Noriega</option><option value="N4xqjZOCrv7DfXklj0Qc" data-nombre="Ivonne Daza">Ivonne Daza</option><option value="PlluEp4vYC4bklNLk1CE" data-nombre="Melissa">Melissa</option><option value="caU6JUyjfHR06pKz5FO7" data-nombre="Sandra Ayala">Sandra Ayala</option></select>
+      </div>
+      <div class="field"><label>Notas</label><textarea id="prospNotas" rows="2" placeholder="Observaciones de la visita..."></textarea></div>
+      <button class="btn btn-primary" id="prospSubmitBtn" onclick="registrarVisita()"><i class="ti ti-send" style="font-size:14px"></i>Registrar visita</button>
     </div>
   </div>
 
@@ -572,17 +601,58 @@ function switchMode(m){
   mode = m;
   document.getElementById('modeNew').className = 'mode-tab'+(m==='new'?' active':'');
   document.getElementById('modeEdit').className = 'mode-tab'+(m==='edit'?' active':'');
+  document.getElementById('modeProspecto').className = 'mode-tab'+(m==='prospecto'?' active':'');
   document.getElementById('editSearchPanel').style.display = m==='edit'?'block':'none';
+  document.getElementById('prospectoPanel').style.display = m==='prospecto'?'block':'none';
+  document.getElementById('canalTabs').style.display = m==='prospecto'?'none':'flex';
   if(m==='new'){
     editOppId=null; editConsecutivo=null;
     document.getElementById('stepsBar').style.display='flex';
     document.getElementById('sec1').style.display='';
     resetForm();
   } else {
-    // en modo editar ocultamos los pasos hasta que se cargue un pedido
+    // en modo editar/prospecto ocultamos los pasos del pedido
     document.getElementById('stepsBar').style.display='none';
     for(let i=1;i<=4;i++) document.getElementById('sec'+i).className='section';
   }
+}
+
+// ═══════════════════════════════════════
+// PROSPECTO (visita, sin pedido)
+// ═══════════════════════════════════════
+async function registrarVisita(){
+  const nombre=document.getElementById('prospNombre').value.trim();
+  const vendSel=document.getElementById('prospVendedora');
+  if(!nombre){ showToast('Escribe el nombre del contacto','error'); return; }
+  if(!vendSel.value){ showToast('Selecciona la vendedora','error'); return; }
+  const btnHTML='<i class="ti ti-send" style="font-size:14px"></i>Registrar visita';
+  setLoading('prospSubmitBtn',true,btnHTML);
+  const payload={
+    action:'registrar_visita',
+    tipo_visita:document.getElementById('prospTipoVisita').value,
+    nombre,
+    nombre_comercial:document.getElementById('prospNombreComercial').value.trim(),
+    telefono:document.getElementById('prospTelefono').value.trim(),
+    ciudad:document.getElementById('prospCiudad').value.trim(),
+    producto_presentado:document.getElementById('prospProducto').value.trim(),
+    vendedora:vendSel.options[vendSel.selectedIndex].getAttribute('data-nombre'),
+    notas:document.getElementById('prospNotas').value.trim()
+  };
+  try{
+    const res=await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    showToast('Visita registrada · '+nombre,'success');
+    document.getElementById('prospNombre').value='';
+    document.getElementById('prospNombreComercial').value='';
+    document.getElementById('prospTelefono').value='';
+    document.getElementById('prospCiudad').value='';
+    document.getElementById('prospProducto').value='';
+    document.getElementById('prospNotas').value='';
+    document.getElementById('prospTipoVisita').value='primera';
+  }catch(e){
+    showToast('Error al registrar. Intenta de nuevo.','error');
+  }
+  setLoading('prospSubmitBtn',false,btnHTML);
 }
 
 // ═══════════════════════════════════════
