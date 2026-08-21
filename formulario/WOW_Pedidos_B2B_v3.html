@@ -386,7 +386,7 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       <div id="pipelineIndicator" class="pipeline-indicator" style="display:none"></div>
       <div class="two-col">
         <div class="field"><label>Tipo de documento</label><select id="tipoDoc"><option value="C-1-ORDEN DE PEDIDO">C-1 · Orden de pedido</option><option value="COTIZACION">Cotización</option></select></div>
-        <div class="field"><label>Forma de pago</label><select id="payMethod" onchange="togglePagoComprobante()"><option value="contado">Contado</option><option value="credito_15">Crédito 15 días</option><option value="credito_30">Crédito 30 días</option><option value="credito_45">Crédito 45 días</option><option value="credito_60">Crédito 60 días</option></select></div>
+        <div class="field"><label>Forma de pago</label><select id="payMethod" onchange="togglePagoComprobante()"><option value="contado">Contado</option><option value="credito_15">Crédito 15 días</option><option value="credito_30">Crédito 30 días</option><option value="credito_45">Crédito 45 días</option><option value="credito_60">Crédito 60 días</option><option value="contra_entrega">Contra entrega</option></select></div>
       </div>
       <div class="field" id="medioPagoWrap" style="display:none">
         <label>Medio de pago <span class="req">*</span></label>
@@ -413,6 +413,19 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
       <div class="two-col">
         <div class="field"><label>Canal del pedido</label><select id="canalPedido"><option value="B2B">B2B · Salón / Profesional</option><option value="B2C">B2C · Cliente final</option></select></div>
         <div class="field"><label>Lista de precio aplicada</label><input type="text" id="listaResumen" disabled></div>
+      </div>
+      <div class="field">
+        <label>¿Dónde se hizo la venta? <span style="color:var(--text3);text-transform:none;font-weight:400">(opcional — solo para reportes en GHL)</span></label>
+        <select id="origenVenta">
+          <option value="">Seleccionar</option>
+          <option value="Instagram">Instagram</option>
+          <option value="Facebook">Facebook</option>
+          <option value="Visita presencial">Visita presencial</option>
+        </select>
+      </div>
+      <div class="field" id="cumpleanosWrap" style="display:none">
+        <label>Fecha de cumpleaños <span style="color:var(--text3);text-transform:none;font-weight:400">(opcional)</span></label>
+        <input type="date" id="fechaCumpleanos">
       </div>
     </div>
     <div class="nav-row">
@@ -904,7 +917,7 @@ async function subirUnComprobante(consecutivo, item){
 }
 // Sube hasta 3 comprobantes uno por uno (mismo mecanismo de siempre) y devuelve sus URLs.
 // url_1 viaja dentro del pedido (como ya hacía); url_2/url_3 se guardan aparte una vez
-// exista la oportunidad, vía guardarComprobantesExtra().
+// exista la oportunidad, vía guardarDatosExtra().
 async function subirComprobantes(consecutivo){
   const urls=['','',''];
   for(let i=0;i<comprobantesData.length && i<3;i++){
@@ -912,13 +925,15 @@ async function subirComprobantes(consecutivo){
   }
   return { url_1:urls[0], url_2:urls[1], url_3:urls[2] };
 }
-// Guarda el 2do/3er comprobante en la oportunidad — requiere que YA exista en GHL.
-// No bloquea el pedido si falla (igual que el resto de la subida de comprobantes).
-async function guardarComprobantesExtra(consecutivo, urls){
-  if(!urls.url_2 && !urls.url_3) return;
+// Guarda el 2do/3er comprobante, origen de venta y/o fecha de cumpleaños — requiere que
+// la oportunidad YA exista en GHL. Cada dato se guarda en su propia rama independiente en
+// Make (no se pisan entre sí). No bloquea el pedido si falla.
+async function guardarDatosExtra(consecutivo, urls, origenVenta, fechaCumpleanos){
+  if(!urls.url_2 && !urls.url_3 && !origenVenta && !fechaCumpleanos) return;
   try{
     await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'comprobantes_guardar', consecutivo, url_1:urls.url_1, url_2:urls.url_2, url_3:urls.url_3})});
+      body:JSON.stringify({action:'comprobantes_guardar', consecutivo, url_1:urls.url_1, url_2:urls.url_2, url_3:urls.url_3,
+        origen_venta:origenVenta||'', fecha_cumpleanos:fechaCumpleanos||''})});
   }catch(e){ /* no bloquea el pedido */ }
 }
 
@@ -929,7 +944,8 @@ function goStep(n){
   if(n > 1 && !clientData){ showToast('Primero busca o crea el cliente','error'); return; }
   if(n > 1 && !document.getElementById('vendedoraSelect').value){ showToast('Selecciona la vendedora responsable','error'); return; }
   if(n > 2 && cart.length === 0){ showToast('Agrega al menos un producto','error'); return; }
-  if(n === 3){ updatePipelineIndicator(); document.getElementById('listaResumen').value = selectedPriceList; togglePagoComprobante(); }
+  if(n === 3){ updatePipelineIndicator(); document.getElementById('listaResumen').value = selectedPriceList; togglePagoComprobante();
+    document.getElementById('cumpleanosWrap').style.display = canalGlobal==='B2C'?'block':'none'; }
   if(n === 4){
     buildSummary();
     const sb=document.getElementById('submitBtn');
@@ -1328,8 +1344,10 @@ async function submitOrder(){
   try{
     const res=await fetch(CFG.WEBHOOK_GHL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('HTTP '+res.status);
-    // La oportunidad ya existe (recién creada) — si hay 2do/3er comprobante, se guardan aparte.
-    guardarComprobantesExtra(consecutivoActual, comprobantesUrls);
+    // La oportunidad ya existe (recién creada) — comprobante 2/3, origen de venta y
+    // cumpleaños (si aplica) se guardan aparte.
+    guardarDatosExtra(consecutivoActual, comprobantesUrls, document.getElementById('origenVenta').value,
+      document.getElementById('fechaCumpleanos').value);
     showToast('Enviado · '+consecutivoActual,'success');
     lastOrderSnapshot={ payload, items:cart, selectedPriceList, fecha:new Date(), totals:t, consecutivo:consecutivoActual };
     document.getElementById('confirmNavRow').style.display='none';
@@ -1362,7 +1380,8 @@ async function actualizarPedido(){
   try{
     const res=await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('HTTP '+res.status);
-    guardarComprobantesExtra(editConsecutivo, comprobantesUrls);
+    guardarDatosExtra(editConsecutivo, comprobantesUrls, document.getElementById('origenVenta').value,
+      document.getElementById('fechaCumpleanos').value);
     showToast('Pedido '+editConsecutivo+' actualizado','success');
     lastOrderSnapshot={ payload:{...payload, cliente:{
       nombre:clientData.name, nombre_comercial:clientData.commercial_name||'', nit:clientData.identification,
@@ -1494,6 +1513,8 @@ function resetForm(){
   document.getElementById('clientInfo').className='client-info';
   document.getElementById('newClientInfo').className='client-info';
   document.getElementById('notes').value='';
+  document.getElementById('origenVenta').value='';
+  document.getElementById('fechaCumpleanos').value='';
   document.getElementById('payMethod').value='contado';
   document.getElementById('retencion').value='0|0';
   document.getElementById('vendedoraSelect').value='';
