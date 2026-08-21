@@ -374,9 +374,9 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
         <div class="hint">Por dónde llegó el pago — viaja a Siigo como el método de pago real de la factura</div>
       </div>
       <div class="field" id="comprobanteWrap" style="display:none">
-        <label>Comprobante de pago <span style="color:var(--text3);text-transform:none;font-weight:400">(opcional)</span></label>
-        <input type="file" id="comprobanteFile" accept="image/*,.pdf" onchange="handleComprobanteFile(this)">
-        <div class="hint">Foto o PDF del comprobante — se guarda en la oportunidad de GHL</div>
+        <label>Comprobante(s) de pago <span style="color:var(--text3);text-transform:none;font-weight:400">(opcional, hasta 3 — útil si son dos pagos separados)</span></label>
+        <input type="file" id="comprobanteFile" accept="image/*,.pdf" multiple onchange="handleComprobanteFile(this)">
+        <div class="hint">Foto(s) o PDF del comprobante — se guardan en la oportunidad de GHL</div>
         <div id="comprobantePreview" style="display:none;margin-top:8px"></div>
       </div>
       <div class="field"><label>Encabezado / Notas internas</label><textarea id="notes" rows="2" placeholder="Descuentos acordados, instrucciones especiales de despacho, observaciones..."></textarea></div>
@@ -440,7 +440,7 @@ let currentStep = 1;
 let selectedPriceList = 'Publico';
 let searchTimer = null;
 let ddFocusIdx = -1;
-let comprobanteData = null; // {filename, mimetype, base64}
+let comprobantesData = []; // [{filename, mimetype, base64, file}, ...] hasta 3
 let consecutivoActual = null;
 let lastOrderSnapshot = null;
 
@@ -774,41 +774,56 @@ function togglePagoComprobante(){
   wrap.style.display=llevaComprobante?'block':'none';
   medioWrap.style.display=llevaComprobante?'block':'none';
   if(!llevaComprobante){
-    comprobanteData=null;
+    comprobantesData=[];
     document.getElementById('comprobanteFile').value='';
     document.getElementById('comprobantePreview').style.display='none';
     document.getElementById('comprobantePreview').innerHTML='';
   }
 }
 function handleComprobanteFile(input){
-  const file=input.files[0];
-  if(!file){ comprobanteData=null; return; }
-  if(file.size>5*1024*1024){ showToast('El archivo no debe superar 5MB','error'); input.value=''; return; }
-  const reader=new FileReader();
-  reader.onload=function(e){
-    comprobanteData={ filename:file.name, mimetype:file.type, base64:e.target.result, file:file };
-    const preview=document.getElementById('comprobantePreview');
-    preview.style.display='block';
-    if(file.type.startsWith('image/')){
-      preview.innerHTML='<img src="'+e.target.result+'" style="max-width:100%;max-height:160px;border-radius:7px;border:1px solid var(--border)"><div class="hint" style="margin-top:4px"><i class="ti ti-check" style="color:var(--green)"></i> '+file.name+'</div>';
-    } else {
-      preview.innerHTML='<div class="status-badge status-ok" style="display:inline-flex"><i class="ti ti-file-check" style="font-size:12px"></i> '+file.name+'</div>';
+  const files=Array.from(input.files||[]).slice(0,3);
+  if(input.files && input.files.length>3) showToast('Máximo 3 comprobantes — se tomaron los primeros 3','error');
+  comprobantesData=new Array(files.length);
+  let pending=files.length;
+  if(!files.length){
+    document.getElementById('comprobantePreview').style.display='none';
+    document.getElementById('comprobantePreview').innerHTML='';
+    return;
+  }
+  files.forEach((file,idx)=>{
+    if(file.size>5*1024*1024){
+      showToast('"'+file.name+'" supera 5MB, se omitió','error');
+      comprobantesData[idx]=null; pending--; if(pending===0) renderComprobantesPreview();
+      return;
     }
-  };
-  reader.readAsDataURL(file);
+    const reader=new FileReader();
+    reader.onload=function(e){
+      comprobantesData[idx]={ filename:file.name, mimetype:file.type, base64:e.target.result, file:file };
+      pending--; if(pending===0) renderComprobantesPreview();
+    };
+    reader.readAsDataURL(file);
+  });
 }
-// Sube el comprobante al hub como multipart/form-data (binario real → Make lo recibe como 1.file),
-// sube el archivo a la Media Library de GHL y DEVUELVE la URL. Así la URL viaja dentro del pedido
-// y el workflow la guarda al crear la oportunidad (sin depender de búsquedas ni de timing).
-// Si algo falla, devuelve '' y el pedido continúa igual.
-async function subirComprobante(consecutivo){
-  if(!comprobanteData || !comprobanteData.file) return '';
+function renderComprobantesPreview(){
+  comprobantesData=comprobantesData.filter(Boolean);
+  const preview=document.getElementById('comprobantePreview');
+  if(!comprobantesData.length){ preview.style.display='none'; preview.innerHTML=''; return; }
+  preview.style.display='block';
+  preview.innerHTML=comprobantesData.map(c=>
+    c.mimetype.startsWith('image/')
+      ? '<img src="'+c.base64+'" style="max-width:100%;max-height:120px;border-radius:7px;border:1px solid var(--border);margin-bottom:4px">'
+      : '<div class="status-badge status-ok" style="display:inline-flex;margin-bottom:4px"><i class="ti ti-file-check" style="font-size:12px"></i> '+c.filename+'</div>'
+  ).join('') + '<div class="hint" style="margin-top:2px"><i class="ti ti-check" style="color:var(--green)"></i> '+comprobantesData.length+' archivo(s) listo(s)</div>';
+}
+// Sube UN comprobante al hub como multipart/form-data (binario real → Make lo recibe como 1.file),
+// lo sube a la Media Library de GHL y DEVUELVE la URL. Si algo falla, devuelve '' (no bloquea el pedido).
+async function subirUnComprobante(consecutivo, item){
   try{
     const fd=new FormData();
     fd.append('action','comprobante');
     fd.append('consecutivo',consecutivo);
-    fd.append('filename',comprobanteData.filename);
-    fd.append('file',comprobanteData.file,comprobanteData.filename); // binario real
+    fd.append('filename',item.filename);
+    fd.append('file',item.file,item.filename); // binario real
     // NO fijar Content-Type: el navegador pone multipart/form-data con boundary
     const ctrl=new AbortController();
     const to=setTimeout(()=>ctrl.abort(),30000); // 30s máx: si la red falla, no congela el pedido
@@ -817,6 +832,25 @@ async function subirComprobante(consecutivo){
     if(res.ok){ const d=await res.json().catch(()=>({})); return d.url||''; }
   }catch(e){ /* no bloquea el pedido */ }
   return '';
+}
+// Sube hasta 3 comprobantes uno por uno (mismo mecanismo de siempre) y devuelve sus URLs.
+// url_1 viaja dentro del pedido (como ya hacía); url_2/url_3 se guardan aparte una vez
+// exista la oportunidad, vía guardarComprobantesExtra().
+async function subirComprobantes(consecutivo){
+  const urls=['','',''];
+  for(let i=0;i<comprobantesData.length && i<3;i++){
+    urls[i]=await subirUnComprobante(consecutivo, comprobantesData[i]);
+  }
+  return { url_1:urls[0], url_2:urls[1], url_3:urls[2] };
+}
+// Guarda el 2do/3er comprobante en la oportunidad — requiere que YA exista en GHL.
+// No bloquea el pedido si falla (igual que el resto de la subida de comprobantes).
+async function guardarComprobantesExtra(consecutivo, urls){
+  if(!urls.url_2 && !urls.url_3) return;
+  try{
+    await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'comprobantes_guardar', consecutivo, url_1:urls.url_1, url_2:urls.url_2, url_3:urls.url_3})});
+  }catch(e){ /* no bloquea el pedido */ }
 }
 
 // ═══════════════════════════════════════
@@ -1180,13 +1214,14 @@ async function submitOrder(){
   const ret=getRetencion();
   const vendNom=(()=>{const s=document.getElementById('vendedoraSelect');return s.value?s.options[s.selectedIndex].getAttribute('data-nombre'):'';})();
 
-  // Sube el comprobante PRIMERO y obtiene su URL, para mandarla dentro del pedido
-  // (así el workflow la guarda al crear la oportunidad, sin depender de búsquedas/timing).
-  const comprobanteUrl = await subirComprobante(consecutivoActual);
+  // Sube el/los comprobante(s) PRIMERO y obtiene sus URLs; la primera viaja dentro del
+  // pedido (así el workflow la guarda al crear la oportunidad, sin depender de búsquedas/timing).
+  // La 2da/3ra (si hay) se guardan aparte una vez la oportunidad ya exista, más abajo.
+  const comprobantesUrls = await subirComprobantes(consecutivoActual);
 
   const payload={
     consecutivo: consecutivoActual,
-    comprobante_url: comprobanteUrl,
+    comprobante_url: comprobantesUrls.url_1,
     canal: canalGlobal,   // 'B2B' | 'B2C' → el workflow rutea el pipeline por esto
     pipeline: pipelineCfg.pipeline, stage: pipelineCfg.stage, tipo_cliente_flujo: pipelineCfg.tipo_cliente_flujo,
     tipo_documento: document.getElementById('tipoDoc').value,
@@ -1217,13 +1252,15 @@ async function submitOrder(){
     retencion_pct:ret.pct, retencion_valor:t.retTot, retencion_tax_id:ret.taxId,
     forma_pago:document.getElementById('payMethod').value,
     medio_pago:document.getElementById('payMethod').value==='contado'?document.getElementById('medioPago').value:'',
-    comprobante_nombre:comprobanteData?comprobanteData.filename:'',
+    comprobante_nombre:comprobantesData[0]?comprobantesData[0].filename:'',
     vendedora_id:document.getElementById('vendedoraSelect').value, vendedora:vendNom,
     notas:document.getElementById('notes').value, fecha:new Date().toISOString()
   };
   try{
     const res=await fetch(CFG.WEBHOOK_GHL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('HTTP '+res.status);
+    // La oportunidad ya existe (recién creada) — si hay 2do/3er comprobante, se guardan aparte.
+    guardarComprobantesExtra(consecutivoActual, comprobantesUrls);
     showToast('Enviado · '+consecutivoActual,'success');
     lastOrderSnapshot={ payload, items:cart, selectedPriceList, fecha:new Date(), totals:t, consecutivo:consecutivoActual };
     document.getElementById('confirmNavRow').style.display='none';
@@ -1239,14 +1276,15 @@ async function actualizarPedido(){
   const btnHTML='<i class="ti ti-refresh" style="font-size:14px"></i>Actualizar pedido';
   setLoading('submitBtn',true,btnHTML);
   const t=computeTotals(), ret=getRetencion();
-  // En edición la oportunidad ya existe: subimos el comprobante (si hay) y su URL se guarda
-  // vía la ruta comprobante (búsqueda por consecutivo, que aquí sí encuentra la Opp).
-  const comprobanteUrl = await subirComprobante(editConsecutivo);
+  // En edición la oportunidad ya existe: subimos el/los comprobante(s) (si hay) — la 1ra URL
+  // se guarda vía la ruta comprobante (búsqueda por consecutivo, que aquí sí encuentra la Opp),
+  // y si hay 2do/3ro se guardan aparte más abajo.
+  const comprobantesUrls = await subirComprobantes(editConsecutivo);
   const payload={
     action:'editar_pedido', opportunity_id:editOppId, consecutivo:editConsecutivo,
     productos:buildProductosText(), productos_siigo:buildProductosSiigo(),
     total:t.total, bruto:t.brutoRetail, subtotal:t.baseNetoTot, iva:t.ivaTot, descuentos:t.descRetail,
-    retencion_pct:ret.pct, retencion_valor:t.retTot, comprobante_url:comprobanteUrl,
+    retencion_pct:ret.pct, retencion_valor:t.retTot, comprobante_url:comprobantesUrls.url_1,
     forma_pago:document.getElementById('payMethod').value,
     medio_pago:document.getElementById('payMethod').value==='contado'?document.getElementById('medioPago').value:'',
     lista_precio:selectedPriceList,
@@ -1255,6 +1293,7 @@ async function actualizarPedido(){
   try{
     const res=await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!res.ok) throw new Error('HTTP '+res.status);
+    guardarComprobantesExtra(editConsecutivo, comprobantesUrls);
     showToast('Pedido '+editConsecutivo+' actualizado','success');
     lastOrderSnapshot={ payload:{...payload, cliente:{
       nombre:clientData.name, nombre_comercial:clientData.commercial_name||'', nit:clientData.identification,
@@ -1379,7 +1418,7 @@ document.addEventListener('DOMContentLoaded',initDeptos);
 if(document.readyState!=='loading') initDeptos();
 
 function resetForm(){
-  cart=[];clientData=null;selectedPriceList='Publico';comprobanteData=null;lastOrderSnapshot=null;consecutivoActual=null;editOppId=null;editConsecutivo=null;
+  cart=[];clientData=null;selectedPriceList='Publico';comprobantesData=[];lastOrderSnapshot=null;consecutivoActual=null;editOppId=null;editConsecutivo=null;
   document.getElementById('nitInput').value='';
   document.getElementById('consecInput').value='';
   document.getElementById('pedidoInfo').className='client-info';
