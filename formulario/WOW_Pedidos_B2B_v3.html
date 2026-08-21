@@ -181,16 +181,17 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
   <!-- ============ MODO BUSCAR / EDITAR ============ -->
   <div id="editSearchPanel" style="display:none">
     <div class="card">
-      <div class="card-title"><i class="ti ti-file-search"></i> Buscar pedido por consecutivo</div>
+      <div class="card-title"><i class="ti ti-file-search"></i> Buscar pedido</div>
       <div class="field">
-        <label>Consecutivo del pedido <span class="req">*</span></label>
+        <label>Consecutivo, nombre o razón social <span class="req">*</span></label>
         <div class="search-wrap">
           <i class="ti ti-hash si"></i>
-          <input type="text" id="consecInput" placeholder="WOW-260712-143855" onkeydown="if(event.key==='Enter')buscarPedido()">
+          <input type="text" id="consecInput" placeholder="WOW-260712-143855 o Salón Rojo" onkeydown="if(event.key==='Enter')buscarPedido()">
         </div>
-        <div class="hint">Escríbelo como aparece en la cotización o el pipeline</div>
+        <div class="hint">Con el consecutivo va directo; con el nombre puede mostrar varios resultados para elegir</div>
       </div>
       <button class="btn btn-blue" id="buscarPedidoBtn" onclick="buscarPedido()"><i class="ti ti-search" style="font-size:14px"></i>Buscar pedido</button>
+      <div id="resultadosBusqueda"></div>
       <div class="client-info" id="pedidoInfo"></div>
       <button class="btn btn-gold" id="downloadBtnSearch" onclick="downloadOrderPDF()" style="display:none;margin-top:10px"><i class="ti ti-download" style="font-size:14px"></i>Descargar PDF del pedido</button>
     </div>
@@ -671,31 +672,49 @@ async function registrarVisita(){
 // ═══════════════════════════════════════
 // BUSCAR PEDIDO (modo editar)
 // ═══════════════════════════════════════
+let ultimaBusquedaOpps=[]; // resultados de la última búsqueda por nombre, para elegir de la lista
 async function buscarPedido(){
-  const cons = document.getElementById('consecInput').value.trim();
-  if(!cons){ showToast('Escribe el consecutivo','error'); return; }
+  const texto = document.getElementById('consecInput').value.trim();
+  if(!texto){ showToast('Escribe el consecutivo, nombre o razón social','error'); return; }
+  const esConsecutivo = /^WOW-\d{6}-\d{6}$/i.test(texto);
   const btnHTML='<i class="ti ti-search" style="font-size:14px"></i>Buscar pedido';
   setLoading('buscarPedidoBtn',true,btnHTML);
   const info=document.getElementById('pedidoInfo');
   info.className='client-info show';
   info.innerHTML='<div style="text-align:center;padding:12px;color:var(--text2);font-size:12px"><span class="loading-spin loading-spin-dark"></span> Buscando en GHL...</div>';
   document.getElementById('downloadBtnSearch').style.display='none';
+  document.getElementById('resultadosBusqueda').innerHTML='';
   try{
-    const res=await fetch(CFG.WEBHOOK_HUB+'?action=buscar_pedido&consecutivo='+encodeURIComponent(cons));
+    const param = esConsecutivo ? 'consecutivo=' : 'nombre=';
+    const res=await fetch(CFG.WEBHOOK_HUB+'?action=buscar_pedido&'+param+encodeURIComponent(texto));
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     const opps=data.opportunities||[];
     if(!opps.length){
-      info.innerHTML='<div style="color:var(--text2);font-size:12px;padding:8px;text-align:center">No se encontró un pedido con ese consecutivo.</div>';
+      info.innerHTML='<div style="color:var(--text2);font-size:12px;padding:8px;text-align:center">No se encontró ningún pedido.</div>';
       setLoading('buscarPedidoBtn',false,btnHTML); return;
     }
-    const opp=opps[0];
-    const stage=(opp.pipelineStageUId||'');
-    loadPedidoIntoForm(opp);
+    if(opps.length===1){
+      loadPedidoIntoForm(opps[0]);
+    } else {
+      ultimaBusquedaOpps=opps;
+      info.innerHTML='';
+      renderResultadosBusqueda(opps);
+    }
   }catch(e){
     info.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;text-align:center"><i class="ti ti-wifi-off"></i> Error al buscar. Verifica conexión.</div>';
   }
   setLoading('buscarPedidoBtn',false,btnHTML);
+}
+function renderResultadosBusqueda(opps){
+  const cont=document.getElementById('resultadosBusqueda');
+  cont.innerHTML='<div class="hint" style="margin:8px 0 4px">'+opps.length+' resultados — elige uno:</div>'
+    + opps.map((o,i)=>{
+        const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'';
+        return '<div class="client-info show" style="cursor:pointer;margin-bottom:6px" onclick="loadPedidoIntoForm(ultimaBusquedaOpps['+i+'])">'
+          +'<div style="font-size:13px;font-weight:500">'+o.name+'</div>'
+          +'<div style="font-size:11px;color:var(--text2)">'+fecha+'</div></div>';
+      }).join('');
 }
 
 // Reconstruye el formulario a partir de una oportunidad de GHL
@@ -707,6 +726,7 @@ const STAGE_IDS_BLOQUEADAS = [
   '50b0cfc0-b02b-4b7c-b031-a27effee5b40'  // Adquisición B2B · Facturado
 ];
 function loadPedidoIntoForm(opp){
+  document.getElementById('resultadosBusqueda').innerHTML='';
   const cf = {};
   (opp.customFields||[]).forEach(c=>{
     cf[c.id] = (c.fieldValueString!==undefined) ? c.fieldValueString
@@ -1509,6 +1529,7 @@ function resetForm(){
   cart=[];clientData=null;selectedPriceList='Publico';comprobantesData=[];lastOrderSnapshot=null;consecutivoActual=null;editOppId=null;editConsecutivo=null;
   document.getElementById('nitInput').value='';
   document.getElementById('consecInput').value='';
+  document.getElementById('resultadosBusqueda').innerHTML='';
   document.getElementById('pedidoInfo').className='client-info';
   document.getElementById('clientInfo').className='client-info';
   document.getElementById('newClientInfo').className='client-info';
