@@ -245,12 +245,12 @@ input:disabled,select:disabled{background:var(--bg);color:var(--text2);cursor:no
           <i class="ti ti-user-check" style="font-size:14px"></i>Consumidor final (venta sin datos)
         </button>
         <div class="field">
-          <label>NIT / Cédula del cliente <span class="req">*</span></label>
+          <label>NIT / Cédula o nombre del cliente <span class="req">*</span></label>
           <div class="search-wrap">
             <i class="ti ti-search si"></i>
-            <input type="text" id="nitInput" placeholder="Ej: 900538127" inputmode="numeric" onkeydown="if(event.key==='Enter')searchClient()">
+            <input type="text" id="nitInput" placeholder="Ej: 900538127 o Salón Rojo" onkeydown="if(event.key==='Enter')searchClient()">
           </div>
-          <div class="hint">Presiona Enter o el botón para buscar en Siigo</div>
+          <div class="hint">Con NIT va directo; con el nombre puede mostrar varios resultados para elegir</div>
         </div>
         <button class="btn" id="searchClientBtn" onclick="searchClient()">
           <i class="ti ti-search" style="font-size:14px"></i>Buscar en Siigo
@@ -483,6 +483,7 @@ let selectedPriceList = 'Publico';
 let searchTimer = null;
 let ddFocusIdx = -1;
 let comprobantesData = []; // [{filename, mimetype, base64, file}, ...] hasta 3
+let ultimaBusquedaClientes = []; // resultados de la última búsqueda de cliente por nombre
 let consecutivoActual = null;
 let lastOrderSnapshot = null;
 
@@ -1001,7 +1002,10 @@ function switchTab(tab){
 // BUSCAR CLIENTE EXISTENTE EN SIIGO
 // ═══════════════════════════════════════
 async function searchClient(){
-  const nit=document.getElementById('nitInput').value.trim().replace(/[^0-9]/g,'');
+  const raw=document.getElementById('nitInput').value.trim();
+  if(!raw){ showToast('Ingresa el NIT o el nombre del cliente','error'); return; }
+  if(/[a-zA-Z]/.test(raw)){ return buscarClientePorNombre(raw); }
+  const nit=raw.replace(/[^0-9]/g,'');
   if(!nit){ showToast('Ingresa el NIT del salón','error'); return; }
   const btnHTML='<i class="ti ti-search" style="font-size:14px"></i>Buscar en Siigo';
   setLoading('searchClientBtn',true,btnHTML);
@@ -1051,6 +1055,49 @@ async function searchClient(){
     info.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;text-align:center"><i class="ti ti-wifi-off"></i> Error al consultar Siigo.</div>';
   }
   setLoading('searchClientBtn',false,btnHTML);
+}
+
+// Busca cliente por nombre/razón social en el catálogo sincronizado (Apps Script + Sheet,
+// ~26 mil clientes de Siigo). Solo resuelve el NIT — con un único resultado (o al elegir uno
+// de varios) se dispara la búsqueda real por NIT contra Siigo, para traer el dato más fresco.
+async function buscarClientePorNombre(texto){
+  const btnHTML='<i class="ti ti-search" style="font-size:14px"></i>Buscar en Siigo';
+  setLoading('searchClientBtn',true,btnHTML);
+  const info=document.getElementById('clientInfo');
+  info.className='client-info show';
+  info.innerHTML='<div style="text-align:center;padding:12px;color:var(--text2);font-size:12px"><span class="loading-spin loading-spin-dark"></span> Buscando cliente por nombre...</div>';
+  try{
+    const res=await fetch(CFG.PRODUCTS_API+'?q='+encodeURIComponent(texto)+'&tipo=cliente');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const results=await res.json();
+    if(!results.length){
+      info.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;color:var(--text2)">No se encontró ningún cliente con ese nombre</span><span class="status-badge status-err">No existe</span></div>'
+        +'<p style="font-size:12px;color:var(--text2);margin-bottom:10px">Es cliente nuevo. Créalo en la pestaña <strong>"Cliente nuevo"</strong>.</p>'
+        +'<button class="btn btn-gold" style="padding:9px" onclick="switchTab(\'new\')"><i class="ti ti-user-plus" style="font-size:13px"></i>Crear cliente nuevo</button>';
+      setLoading('searchClientBtn',false,btnHTML);
+    } else if(results.length===1){
+      document.getElementById('nitInput').value=String(results[0].identification);
+      setLoading('searchClientBtn',false,btnHTML);
+      return searchClient();
+    } else {
+      ultimaBusquedaClientes=results;
+      info.innerHTML='<div class="hint" style="margin-bottom:6px">'+results.length+' resultados — elige uno:</div>'
+        + results.map(function(r,i){
+            const comercial = (r.commercial_name && r.commercial_name!==r.name) ? ' · '+r.commercial_name : '';
+            return '<div class="client-info show" style="cursor:pointer;margin-bottom:6px" onclick="elegirClienteEncontrado('+i+')">'
+              +'<div style="font-size:13px;font-weight:500">'+r.name+comercial+'</div>'
+              +'<div style="font-size:11px;color:var(--text2)">NIT '+r.identification+(r.city_name?' · '+r.city_name:'')+'</div></div>';
+          }).join('');
+      setLoading('searchClientBtn',false,btnHTML);
+    }
+  }catch(e){
+    info.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;text-align:center"><i class="ti ti-wifi-off"></i> Error al buscar cliente.</div>';
+    setLoading('searchClientBtn',false,btnHTML);
+  }
+}
+function elegirClienteEncontrado(i){
+  document.getElementById('nitInput').value=String(ultimaBusquedaClientes[i].identification);
+  searchClient();
 }
 
 // ═══════════════════════════════════════
