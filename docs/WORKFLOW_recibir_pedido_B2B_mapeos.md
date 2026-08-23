@@ -61,6 +61,7 @@ Copia esta tabla al configurar el paso "Create/Update Contact". Los campos del b
 | Tipo de Compra | `tipo_de_compra` | `{{inboundWebhookRequest.cliente.tipo_compra}}` |
 | Tipo de Cliente | `tipo_de_cliente` | `{{inboundWebhookRequest.cliente.tipo_cliente}}` |
 | Canal | `canal` | `{{inboundWebhookRequest.cliente.canal}}` |
+| Forma de Pago Preferida | `forma_de_pago_preferida` | `{{inboundWebhookRequest.forma_pago}}` |
 | Vendedora | `vendedora` | `{{inboundWebhookRequest.vendedora}}` |
 | ID Cliente Siigo (opcional) | `id_cliente_siigo` | `{{inboundWebhookRequest.cliente.id_siigo}}` |
 
@@ -172,5 +173,7 @@ Cuando la oportunidad se mueve al stage **"Aprobado para facturar"**, el workflo
 - [ ] Ampliar Create/Update Contact con los 17 mapeos de la tabla superior (hoy solo tiene 3)
 - [ ] Ampliar Create Opportunity con los 24 mapeos de la tabla intermedia (hoy tiene 4)
 - [ ] Cambiar tipo de `Cliente Ciudad` a TEXT (o cargar el dropdown con las 300+ ciudades DANE)
+- [ ] Agregar el mapeo de `Forma de Pago Preferida` en Create/Update Contact (tabla superior)
+- [ ] En `WOW - Disparar Facturación`, corregir `cliente_ciudad` (hoy lee `{{contact.country}}`, debe ser `{{contact.cliente_ciudad}}`) y `forma_pago` (debe salir de `{{opportunity.forma_pago}}`, no del contacto)
 - [ ] En `WOW - Disparar Facturación`, reemplazar el body del Send Webhook por el JSON de arriba
 - [ ] Test end-to-end con el HTML corregido (los 5 parches) contra un cliente nuevo en una ciudad distinta a Bogotá

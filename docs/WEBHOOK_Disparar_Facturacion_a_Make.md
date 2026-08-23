@@ -17,7 +17,7 @@ oportunidad entra a "Aprobado para facturar" / "Facturado".
 | ❌ FALTA | `productos_siigo` | **Sin esto la factura sale sin items.** Hoy mandas `productos` (texto legible) que no es JSON válido. |
 | ❌ FALTA | `contact_id` | Necesario para guardar el ID de Siigo de vuelta en el contacto. |
 | ⚠️ MAL | `forma_pago` = `{{contact.forma_de_pago_preferida}}` | Debe salir de la oportunidad: `{{opportunity.forma_pago}}` |
-| ⚠️ MAL | `cliente_ciudad` = `{{contact.city}}` | Debe ser `{{contact.cliente_ciudad}}` (el nativo `city` viene vacío en B2B) |
+| ⚠️ MAL | `cliente_ciudad` = `{{contact.country}}` | Apunta al campo nativo **Country** (vacío en B2B). Debe ser `{{contact.cliente_ciudad}}` |
 | ⚠️ MAL | `cliente_direccion` = `{{contact.full_address}}` | Debe ser `{{contact.cliente_direccion}}` |
 | ➕ FALTAN | fiscales | `tipo_documento`, `razon_social`, `tipo_persona`, `responsabilidad_fiscal`, `state_code`, `city_code`, contacto\_\* |
 
