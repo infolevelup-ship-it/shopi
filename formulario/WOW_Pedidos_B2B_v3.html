@@ -953,6 +953,10 @@ async function subirComprobantes(consecutivo){
 async function guardarDatosExtra(consecutivo, urls, origenVenta, fechaCumpleanos){
   if(!urls.url_2 && !urls.url_3 && !origenVenta && !fechaCumpleanos) return;
   try{
+    // Espera a que el workflow de GHL termine de crear la oportunidad (Create Contact →
+    // Create Opportunity) antes de que Make la busque por consecutivo — si se busca de
+    // inmediato, la oportunidad aún no existe y la búsqueda no encuentra nada.
+    await new Promise(r=>setTimeout(r,7000));
     await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'comprobantes_guardar', consecutivo, url_1:urls.url_1, url_2:urls.url_2, url_3:urls.url_3,
         origen_venta:origenVenta||'', fecha_cumpleanos:fechaCumpleanos||''})});
