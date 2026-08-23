@@ -926,6 +926,7 @@ async function subirUnComprobante(consecutivo, item){
     const fd=new FormData();
     fd.append('action','comprobante');
     fd.append('consecutivo',consecutivo);
+    fd.append('nombre',(clientData&&clientData.name)||'');
     fd.append('filename',item.filename);
     fd.append('file',item.file,item.filename); // binario real
     // NO fijar Content-Type: el navegador pone multipart/form-data con boundary
@@ -958,7 +959,8 @@ async function guardarDatosExtra(consecutivo, urls, origenVenta, fechaCumpleanos
     // inmediato, la oportunidad aún no existe y la búsqueda no encuentra nada.
     await new Promise(r=>setTimeout(r,7000));
     await fetch(CFG.WEBHOOK_HUB,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'comprobantes_guardar', consecutivo, url_1:urls.url_1, url_2:urls.url_2, url_3:urls.url_3,
+      body:JSON.stringify({action:'comprobantes_guardar', consecutivo, nombre:(clientData&&clientData.name)||'',
+        url_1:urls.url_1, url_2:urls.url_2, url_3:urls.url_3,
         origen_venta:origenVenta||'', fecha_cumpleanos:fechaCumpleanos||''})});
   }catch(e){ /* no bloquea el pedido */ }
 }
