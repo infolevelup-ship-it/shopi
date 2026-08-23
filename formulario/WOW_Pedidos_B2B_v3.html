@@ -1381,6 +1381,9 @@ async function submitOrder(){
   const payload={
     consecutivo: consecutivoActual,
     comprobante_url: comprobantesUrls.url_1,
+    comprobante_url_2: comprobantesUrls.url_2,
+    comprobante_url_3: comprobantesUrls.url_3,
+    origen_venta: document.getElementById('origenVenta').value,
     canal: canalGlobal,   // 'B2B' | 'B2C' → el workflow rutea el pipeline por esto
     pipeline: pipelineCfg.pipeline, stage: pipelineCfg.stage, tipo_cliente_flujo: pipelineCfg.tipo_cliente_flujo,
     tipo_documento: document.getElementById('tipoDoc').value,
