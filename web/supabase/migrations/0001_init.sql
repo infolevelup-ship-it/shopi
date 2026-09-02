@@ -11,7 +11,11 @@
 -- ============================================================================
 
 create extension if not exists pgcrypto;   -- gen_random_uuid()
-create extension if not exists pg_trgm;    -- búsqueda por similitud (nombre, marca)
+
+-- pg_trgm fuera de public (recomendación del linter de seguridad de Supabase:
+-- no instalar extensiones en el schema expuesto por PostgREST)
+create schema if not exists extensions;
+create extension if not exists pg_trgm schema extensions;   -- búsqueda por similitud (nombre, marca)
 
 -- ============================================================================
 -- 1. ENUMS
@@ -145,7 +149,7 @@ create index customers_responsible_idx on customers (responsible_user_id);
 create index customers_siigo_id_idx on customers (siigo_customer_id);
 create index customers_ghl_contact_idx on customers (ghl_contact_id);
 create index customers_phone_idx on customers (phone);
-create index customers_display_name_trgm on customers using gin (coalesce(commercial_name, legal_name, first_name || ' ' || last_name) gin_trgm_ops);
+create index customers_display_name_trgm on customers using gin (coalesce(commercial_name, legal_name, first_name || ' ' || last_name) extensions.gin_trgm_ops);
 
 -- ============================================================================
 -- 4. CUSTOMER ASSIGNMENTS  (doc 02 §5)
@@ -244,8 +248,8 @@ create table products (
 
 create unique index products_code_uniq on products (code);
 create unique index products_siigo_id_uniq on products (siigo_product_id);
-create index products_name_trgm on products using gin (name gin_trgm_ops);
-create index products_brand_trgm on products using gin (brand gin_trgm_ops);
+create index products_name_trgm on products using gin (name extensions.gin_trgm_ops);
+create index products_brand_trgm on products using gin (brand extensions.gin_trgm_ops);
 create index products_active_idx on products (active);
 
 -- ============================================================================
@@ -401,6 +405,9 @@ create table order_status_history (
 
 create index order_status_history_order_idx on order_status_history (order_id, created_at);
 
+-- security definer: order_status_history tiene RLS sin política de INSERT
+-- (nadie debe insertar ahí a mano, solo este trigger). SECURITY DEFINER lo
+-- hace correr como el dueño de la tabla, que sí puede escribir pese al RLS.
 create or replace function log_order_status_change() returns trigger as $$
 begin
   if old.status is distinct from new.status then
@@ -409,7 +416,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer set search_path = public;
 
 create trigger orders_status_history
   after update on orders
@@ -488,7 +495,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 create trigger attachments_max_receipts
   before insert on attachments
@@ -669,7 +676,7 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 do $$
 declare t text;
@@ -686,7 +693,9 @@ end $$;
 -- 23. VISTA customer_metrics  (doc 02 §23 — valores derivados, nunca hechos históricos)
 -- ============================================================================
 
-create view customer_metrics as
+-- security_invoker: sin esto la vista corre con los privilegios de quien la
+-- creó (de facto salta el RLS de quien consulta) — Postgres 15+.
+create view customer_metrics with (security_invoker = true) as
 select
   c.id as customer_id,
   count(o.id) filter (where o.status not in ('CANCELLED')) as orders_count,
@@ -708,22 +717,45 @@ group by c.id;
 
 create or replace function current_wow_role() returns user_role as $$
   select role from users where auth_user_id = auth.uid();
-$$ language sql stable security definer;
+$$ language sql stable security definer set search_path = public;
 
 create or replace function current_wow_user_id() returns uuid as $$
   select id from users where auth_user_id = auth.uid();
-$$ language sql stable security definer;
+$$ language sql stable security definer set search_path = public;
 
+-- Estas dos son helpers internos usados dentro de políticas RLS, no
+-- endpoints públicos. Postgres las expone por defecto a anon/authenticated
+-- vía /rest/v1/rpc/... al crearlas (Supabase advisor: "Public Can Execute
+-- SECURITY DEFINER Function") — restringir a solo lo que las políticas
+-- necesitan (authenticated; ninguna política nuestra depende de ellas para
+-- anon, que nunca tiene auth.uid()).
+revoke execute on function current_wow_role() from anon, authenticated;
+revoke execute on function current_wow_user_id() from anon, authenticated;
+grant execute on function current_wow_role() to authenticated;
+grant execute on function current_wow_user_id() to authenticated;
+
+alter table users enable row level security;
 alter table customers enable row level security;
-alter table orders enable row level security;
-alter table order_items enable row level security;
+alter table customer_assignments enable row level security;
+alter table customer_activities enable row level security;
+alter table prospects enable row level security;
+alter table products enable row level security;
 alter table quotes enable row level security;
 alter table quote_items enable row level security;
+alter table orders enable row level security;
+alter table order_items enable row level security;
+alter table order_status_history enable row level security;
+alter table order_reviews enable row level security;
+alter table payments enable row level security;
+alter table attachments enable row level security;
 alter table invoices enable row level security;
 alter table invoice_operations enable row level security;
+alter table follow_ups enable row level security;
+alter table shipments enable row level security;
 alter table audit_logs enable row level security;
 alter table integration_logs enable row level security;
-alter table users enable row level security;
+alter table sync_jobs enable row level security;
+alter table app_settings enable row level security;
 
 -- Usuarios: cualquier cuenta interna autenticada puede leer el directorio de
 -- usuarios (roster pequeño, 4 vendedoras + bodega + admin — necesario para
@@ -731,8 +763,10 @@ alter table users enable row level security;
 -- escribe su propia fila desde el cliente: alta, cambio de rol y
 -- activar/desactivar son exclusivos de ADMIN (doc 05 §5), vía función
 -- backend, nunca UPDATE directo.
+-- (select auth.uid()) en vez de auth.uid() a secas: evita que Postgres la
+-- reevalúe fila por fila (Supabase performance advisor "Auth RLS Initplan").
 create policy users_select on users for select
-  using (auth.uid() is not null);
+  using ((select auth.uid()) is not null);
 
 -- Clientes: todo usuario interno activo puede leer (necesario para detectar
 -- duplicados, doc 01 §6); escritura solo vendedora+ (backend valida propiedad)
@@ -740,6 +774,47 @@ create policy customers_select on customers for select
   using (current_wow_role() is not null);
 create policy customers_insert on customers for insert
   with check (current_wow_role() in ('SELLER','WAREHOUSE','SUPERVISOR','ADMIN'));
+
+-- customer_assignments: todos ven quién es responsable de qué (doc 01 §5/§6);
+-- solo puede insertar quien se asigna a sí misma (alta de cliente nuevo) o
+-- supervisor/admin (reasignación real, doc 05 §6)
+create policy customer_assignments_select on customer_assignments for select
+  using (current_wow_role() is not null);
+create policy customer_assignments_insert on customer_assignments for insert
+  with check (user_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+
+-- customer_activities: línea de tiempo visible y editable por cualquier interno
+create policy customer_activities_select on customer_activities for select
+  using (current_wow_role() is not null);
+create policy customer_activities_insert on customer_activities for insert
+  with check (current_wow_role() is not null);
+
+-- prospects: cada vendedora ve/gestiona los propios; supervisor/admin ven todos
+create policy prospects_select on prospects for select
+  using (user_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+create policy prospects_insert on prospects for insert
+  with check (user_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+
+-- products: catálogo de lectura para todos los roles internos; alta/edición
+-- solo admin (la sincronización real corre con service_role, no con esto)
+create policy products_select on products for select
+  using (current_wow_role() is not null);
+create policy products_insert on products for insert
+  with check (current_wow_role() = 'ADMIN');
+
+-- quotes: misma regla que orders (seller ve lo propio; bodega/supervisor/admin ven todo)
+create policy quotes_select on quotes for select
+  using (
+    seller_id = current_wow_user_id()
+    or current_wow_role() in ('WAREHOUSE','SUPERVISOR','ADMIN')
+  );
+create policy quotes_insert on quotes for insert
+  with check (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+
+create policy quote_items_select on quote_items for select
+  using (exists (select 1 from quotes q where q.id = quote_items.quote_id));
+create policy quote_items_insert on quote_items for insert
+  with check (exists (select 1 from quotes q where q.id = quote_items.quote_id));
 
 -- Pedidos: vendedora ve los propios; bodega/supervisor/admin ven todos
 create policy orders_select on orders for select
@@ -753,6 +828,29 @@ create policy orders_insert on orders for insert
 create policy order_items_select on order_items for select
   using (exists (select 1 from orders o where o.id = order_items.order_id));
 
+-- order_status_history: visible según se pueda ver el pedido; nadie inserta
+-- manualmente — solo el trigger log_order_status_change (security definer)
+create policy order_status_history_select on order_status_history for select
+  using (exists (select 1 from orders o where o.id = order_status_history.order_id));
+
+-- order_reviews: checklist de bodega — nunca visible para vendedora (doc 08 §15)
+create policy order_reviews_select on order_reviews for select
+  using (current_wow_role() in ('WAREHOUSE','SUPERVISOR','ADMIN'));
+create policy order_reviews_insert on order_reviews for insert
+  with check (current_wow_role() in ('WAREHOUSE','SUPERVISOR','ADMIN'));
+
+-- payments: visible según se pueda ver el pedido; cualquier interno registra
+create policy payments_select on payments for select
+  using (exists (select 1 from orders o where o.id = payments.order_id));
+create policy payments_insert on payments for insert
+  with check (current_wow_role() is not null);
+
+-- attachments: comprobantes — sube la vendedora, verifica bodega
+create policy attachments_select on attachments for select
+  using (current_wow_role() is not null);
+create policy attachments_insert on attachments for insert
+  with check (current_wow_role() is not null);
+
 -- Facturación: solo lectura desde el cliente. Toda escritura pasa por
 -- función backend con service_role (doc 01 §18, doc 03 §13) — nunca INSERT
 -- directo desde el navegador.
@@ -761,10 +859,35 @@ create policy invoices_select on invoices for select
 create policy invoice_operations_select on invoice_operations for select
   using (current_wow_role() in ('WAREHOUSE','SUPERVISOR','ADMIN'));
 
+-- follow_ups: cada vendedora ve/gestiona los propios; supervisor/admin ven todos
+create policy follow_ups_select on follow_ups for select
+  using (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+create policy follow_ups_insert on follow_ups for insert
+  with check (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+
+-- shipments: visible según se pueda ver el pedido; solo bodega despacha
+create policy shipments_select on shipments for select
+  using (exists (select 1 from orders o where o.id = shipments.order_id));
+create policy shipments_insert on shipments for insert
+  with check (current_wow_role() in ('WAREHOUSE','SUPERVISOR','ADMIN'));
+
 -- Auditoría: solo supervisor/admin leen; nadie escribe desde el cliente
 create policy audit_logs_select on audit_logs for select
   using (current_wow_role() in ('SUPERVISOR','ADMIN'));
 create policy integration_logs_select on integration_logs for select
+  using (current_wow_role() = 'ADMIN');
+
+-- sync_jobs: solo admin — el resto de escrituras las hace el backend con
+-- service_role (bypassa RLS), esto es únicamente para que admin pueda auditar
+create policy sync_jobs_select on sync_jobs for select
+  using (current_wow_role() = 'ADMIN');
+
+-- app_settings: catálogos configurables — lectura para todos, escritura admin
+create policy app_settings_select on app_settings for select
+  using (current_wow_role() is not null);
+create policy app_settings_insert on app_settings for insert
+  with check (current_wow_role() = 'ADMIN');
+create policy app_settings_update on app_settings for update
   using (current_wow_role() = 'ADMIN');
 
 -- Nota: las políticas de UPDATE para transiciones de estado (aprobar,
@@ -773,3 +896,30 @@ create policy integration_logs_select on integration_logs for select
 -- políticas RLS genéricas de UPDATE — así la máquina de estados del doc 04
 -- vive en un solo lugar (ver docs/03_LOGICA_BACKEND_Y_API.md §9, "commands
 -- vs updates").
+
+-- ============================================================================
+-- 25. Índices en columnas FK "quién hizo esto" (Supabase performance advisor)
+-- ============================================================================
+
+create index app_settings_updated_by_idx on app_settings (updated_by);
+create index attachments_uploaded_by_idx on attachments (uploaded_by);
+create index audit_logs_user_id_idx on audit_logs (user_id);
+create index customer_activities_user_id_idx on customer_activities (user_id);
+create index customer_assignments_assigned_by_idx on customer_assignments (assigned_by);
+create index customers_merged_into_idx on customers (merged_into_customer_id);
+create index follow_ups_customer_id_idx on follow_ups (customer_id);
+create index invoices_customer_id_idx on invoices (customer_id);
+create index invoices_issued_by_idx on invoices (issued_by);
+create index order_items_product_id_idx on order_items (product_id);
+create index order_reviews_reviewed_by_idx on order_reviews (reviewed_by);
+create index order_status_history_changed_by_idx on order_status_history (changed_by);
+create index orders_approved_by_idx on orders (approved_by);
+create index orders_dispatched_by_idx on orders (dispatched_by);
+create index orders_invoiced_by_idx on orders (invoiced_by);
+create index orders_responsible_owner_idx on orders (responsible_customer_owner_id);
+create index orders_warehouse_reviewed_by_idx on orders (warehouse_reviewed_by);
+create index payments_created_by_idx on payments (created_by);
+create index prospects_customer_id_idx on prospects (customer_id);
+create index quote_items_product_id_idx on quote_items (product_id);
+create index quotes_converted_order_idx on quotes (converted_order_id);
+create index shipments_dispatched_by_idx on shipments (dispatched_by);

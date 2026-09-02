@@ -3,17 +3,20 @@
 Next.js (App Router, TypeScript, Tailwind) + Supabase. Ver `../docs/` para las reglas de negocio
 y el modelo de datos completos — este README es solo cómo levantar el proyecto, no repite reglas.
 
-## 1. Crear el proyecto en Supabase
+## 1. Proyecto de Supabase
 
-1. Crea un proyecto nuevo en [supabase.com](https://supabase.com).
-2. En **Project Settings → API**, copia `Project URL`, `anon public key` y `service_role key`.
-3. En **SQL Editor**, corre el contenido de `supabase/migrations/0001_init.sql` completo (es el
-   mismo esquema validado en `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` — cualquier cambio futuro al
-   esquema se hace primero ahí y se copia aquí, no al revés).
-   Alternativa con la CLI de Supabase: `supabase link` y luego `supabase db push`.
-4. En **Authentication → Users**, crea manualmente los primeros usuarios de prueba (uno por rol:
-   `SELLER`, `WAREHOUSE`, `SUPERVISOR`, `ADMIN` — criterio de aceptación de la Fase 1, doc 10 §4).
-5. Para cada uno, inserta su fila en `public.users` (columna `auth_user_id` = el `id` que Supabase
+Ya existe y ya tiene el esquema aplicado: **"crm wow"** (ref `ibzubaspoyuwoykeghce`), conectado vía
+el MCP de Supabase. El esquema completo (22 tablas, RLS, índices) se aplicó y verificó ahí
+directamente — no hay que crearlo de nuevo ni volver a correr el SQL a mano.
+
+Pendiente, solo esto (el MCP no expone esta clave, es la que salta RLS por completo):
+
+1. Entra a [supabase.com/dashboard](https://supabase.com/dashboard) → proyecto "crm wow" →
+   **Project Settings → API → Project API keys → `service_role`** (secreta).
+2. Pégala en `.env.local` (ya está creado en este entorno) en `SUPABASE_SERVICE_ROLE_KEY`.
+3. En **Authentication → Users**, crea los primeros usuarios de prueba (uno por rol: `SELLER`,
+   `WAREHOUSE`, `SUPERVISOR`, `ADMIN` — criterio de aceptación de la Fase 1, doc 10 §4).
+4. Para cada uno, inserta su fila en `public.users` (columna `auth_user_id` = el `id` que Supabase
    Auth le asignó, visible en el panel de Authentication):
 
    ```sql
@@ -24,15 +27,21 @@ y el modelo de datos completos — este README es solo cómo levantar el proyect
    Sin esta fila, la persona puede iniciar sesión pero la app le muestra "no tienes perfil
    asignado" — es la validación de backend funcionando, no un error.
 
-## 2. Configurar variables de entorno
+Si en el futuro se crea un proyecto nuevo desde cero: `supabase/migrations/0001_init.sql` tiene el
+esquema completo, listo para pegar en el SQL Editor o correr con `supabase db push`.
+
+## 2. Variables de entorno
+
+`.env.local` ya existe en este entorno con `NEXT_PUBLIC_SUPABASE_URL` y
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` reales (proyecto "crm wow"). Solo falta pegar
+`SUPABASE_SERVICE_ROLE_KEY` (paso 1). En otra máquina, parte de `.env.example`:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Rellena `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY`
-con lo del paso 1. Las variables de `SIIGO_*` y `GHL_*` se usan más adelante (fase de integración,
-docs 06 y 07) — no bloquean levantar el proyecto hoy.
+Las variables de `SIIGO_*` y `GHL_*` se usan más adelante (fase de integración, docs 06 y 07) —
+no bloquean levantar el proyecto hoy.
 
 ## 3. Correr en local
 
@@ -63,6 +72,9 @@ src/
     service-role.ts        cliente que salta RLS — SOLO en server actions/API routes,
                            solo para lo que el doc 01 §18/§36 exige hacer en backend
     middleware.ts          refresca sesión y protege rutas
+    database.types.ts      tipos TypeScript generados desde el esquema real de Supabase.
+                           Regenerar tras cada cambio de esquema con el MCP de Supabase
+                           (generate_typescript_types) o `supabase gen types typescript`.
 supabase/
   migrations/0001_init.sql copia desplegable del esquema (fuente real: ../docs/SQL_MODELO_DE_DATOS_SUPABASE.sql)
 ```

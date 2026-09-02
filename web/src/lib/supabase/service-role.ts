@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
 // Bypasses RLS entirely — never import this outside a server action or API
 // route, and never after checking only the frontend role. Every caller must
@@ -8,7 +9,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 // says the client may never perform directly: writing invoices,
 // invoice_operations, audit_logs, integration_logs.
 export function createServiceRoleClient() {
-  return createSupabaseClient(
+  return createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } },
