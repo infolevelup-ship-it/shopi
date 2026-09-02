@@ -2394,23 +2394,30 @@ No al revés.
 
 Este documento define la lógica general, pero existen aspectos que deben verificarse técnicamente antes de cerrar la implementación:
 
-1. Endpoints exactos de inventario de Siigo.
-2. Cómo consultar stock por producto.
-3. Cómo identificar correctamente productos en Siigo.
-4. Cómo consultar/reconciliar facturas después de un timeout.
-5. Reglas exactas de numeración FV-1 vs FV-4.
-6. Regla correcta de `vat_responsible`.
-7. Catálogo completo de responsabilidades fiscales.
-8. Estructura definitiva para nombres de personas naturales.
-9. Campos fiscales obligatorios.
-10. Límites/rate limits de las APIs.
-11. Estrategia exacta de sincronización con GHL.
-12. Qué funciones actuales de GHL deben permanecer.
-13. Qué información histórica debe migrarse.
-14. Qué datos deben conservarse por razones legales/contables.
-15. Política de backups y recuperación.
+1. ✅ Endpoints exactos de inventario de Siigo — **resuelto** (2026-09-02): viene embebido en `GET /v1/products`, no en un endpoint separado. Ver `docs/06_INTEGRACION_SIIGO.md` §10.
+2. ✅ Cómo consultar stock por producto — **resuelto**: mismo objeto de producto trae `available_quantity` y `warehouses: [{id, name, quantity}]`. Ver §10.
+3. Cómo identificar correctamente productos en Siigo — pendiente (usar `siigo_product_id` + `code`, ya así en el doc 02; no requirió llamada adicional).
+4. Cómo consultar/reconciliar facturas después de un timeout — pendiente. `GET /v1/invoices?document.id=...` sirve para localizar una factura por documento (usado para validar el punto 5), falta definir la estrategia completa de reconciliación.
+5. ✅ Reglas exactas de numeración FV-1 vs FV-4 — **resuelto**: solo existe un tipo de documento electrónico vigente (`34963`, código 4). No hay que elegir serie en tiempo de ejecución. Ver §19.
+6. ✅ Regla correcta de `vat_responsible` — **resuelto parcialmente**: confirmado el valor real en un cliente jurídico existente (`false`, ver ejemplo en doc 06 §6). Falta la regla general (cuándo es `true`).
+7. Catálogo completo de responsabilidades fiscales — parcialmente resuelto: se vio un ejemplo real (`R-99-PN`), falta el catálogo completo.
+8. ✅ Estructura definitiva para nombres de personas naturales — **resuelto**: `name: [nombres, apellidos]`, Siigo no separa nada — el corte automático por espacio era un bug nuestro, no una limitación de Siigo. Ver §7 del doc 06.
+9. Campos fiscales obligatorios — parcialmente resuelto vía el ejemplo de cliente real; falta confirmar cuáles son estrictamente obligatorios vs. opcionales.
+10. Límites/rate limits de las APIs — pendiente.
+11. Estrategia exacta de sincronización con GHL — pendiente.
+12. Qué funciones actuales de GHL deben permanecer — pendiente.
+13. Qué información histórica debe migrarse — pendiente.
+14. Qué datos deben conservarse por razones legales/contables — pendiente.
+15. Política de backups y recuperación — pendiente.
 
-Estos puntos **no deben inventarse**. Deben verificarse contra la API y reglas reales antes de convertirlos en código productivo.
+**Hallazgo adicional no listado originalmente:** el centro de costo (`cost_center`) usado en
+facturación es una decisión de negocio pendiente, no solo técnica — ver `docs/06_INTEGRACION_SIIGO.md`
+§22 ("Centro de costo — pendiente de decisión de negocio"). Y la retención al 10% que ofrece el
+formulario actual no se encontró en el catálogo real de Siigo — ver doc 06 §14.
+
+Estos puntos **no deben inventarse**. Los ya marcados ✅ se verificaron contra la API y datos reales
+de la cuenta de WOW en Siigo el 2026-09-02 (ver `docs/06_INTEGRACION_SIIGO.md` §22); el resto sigue
+pendiente de verificar antes de convertirlos en código productivo.
 
 ---
 
