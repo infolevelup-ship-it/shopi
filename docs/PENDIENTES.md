@@ -62,7 +62,10 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
 - [ ] Estrategia exacta de sincronización.
 - [ ] Qué funciones actuales de GHL deben permanecer (CRM, marketing) vs. cuáles retira WOW.
 
-## Migración (fase 11-12, sin empezar)
+## Migración (fase 12) — infraestructura construida, el ETL en sí sigue bloqueado
+
+Ver el detalle completo en § Fase 12 más abajo. Lo que sigue sin resolverse, tal cual doc 09 §1 lo
+exige ("debe definirse antes de la migración"):
 
 - [ ] Qué información histórica se migra y qué se deja solo como referencia.
 - [ ] Qué datos deben conservarse por razones legales/contables.
@@ -464,6 +467,56 @@ Igual que Fase 10, sin dependencias externas — todo probado de verdad contra e
       período, no series de tiempo. `/reports` está estructurado para agregar esto sin rehacer nada.
 - [ ] Notificaciones (doc 01 §57) — los números del reporte responden "¿cuánto pasó?", no avisan en
       el momento; ya estaba anotado igual en la Fase 10 y sigue siendo una capa aparte.
+
+## Fase 12 (Migración) — infraestructura construida; el ETL en sí no se pudo construir
+
+Distinta de todas las fases anteriores: no es una funcionalidad de la aplicación en curso, es un
+proceso de datos de una sola vez, y doc 09 §1 es explícito en que tiene un bloqueo real antes de
+poder empezar: **"el universo exacto debe definirse antes de la migración"** (¿~12.000 clientes de
+Siigo/GHL o el catálogo de Apps Script de ~26.000?). Sin esa decisión, y sin archivos reales de
+origen (export de Siigo, de GHL, el Sheet, el Apps Script) para saber su forma real, no hay ETL
+que escribir con algo de confianza — sería el mismo problema que ya se evitó con Siigo/GHL
+(código sin poder probar), pero peor: un error de dedupe aquí puede perder o duplicar en silencio
+el historial real de un cliente, no solo devolver un 4xx.
+
+Lo que sí se construyó — la infraestructura que doc 09 pide y que NO depende de esa decisión:
+
+- [x] `migration_batches` (doc 09 §17-19): cada lote con sus conteos antes/después
+      (creados/actualizados/omitidos/fallidos).
+- [x] `customer_import_staging` (doc 09 §5-7): staging real — nunca se carga directo a
+      `customers`. Trae los campos normalizados (documento, teléfono, email, nombre, ciudad) más
+      el dato crudo (`raw_data jsonb`) para poder reprocesar sin volver a la fuente.
+- [x] `customer_merge_candidates` (doc 09 §8): candidatos de fusión con motivo/confianza/estado,
+      para que un humano confirme — nunca se fusiona solo.
+- [x] `invoices.historical_invoice_number` / `historical_siigo_invoice_id` + estado
+      `invoice_status = 'HISTORICAL'` (doc 09 §13: "no emitir, solo guardar referencia").
+      Encontrado y respetado de paso: el pedido histórico asociado nunca puede quedar
+      `INVOICED`/`INVOICING` — ya existía ese constraint desde la Fase 1
+      (`orders_historical_never_invoices`, doc 04 §21); su estado final correcto es `DELIVERED`.
+      Verificado con sesión simulada: intentar `INVOICED` en un pedido `HISTORICAL` sí falla con
+      ese constraint, `DELIVERED` sí funciona.
+- [x] `quote_status` ahora incluye `LEGACY_IMPORTED` (doc 09 §14: cotizaciones antiguas sin estado
+      real conocido).
+
+Verificado con sesión de admin simulada contra el proyecto real (rollback después): insertar un
+lote, una fila de staging, un candidato de fusión, y una factura histórica — todo funciona y
+respeta las relaciones/constraints existentes; una vendedora no puede leer ninguna de estas tablas
+(solo admin, RLS verificado con sesión de vendedora en 0 filas).
+
+Lo que falta, y por qué no se construyó ahora:
+
+- [ ] El ETL real (`EXTRACT → NORMALIZE → DEDUPE → MAP → VALIDATE → IMPORT → RECONCILE`, doc 09
+      §3) — necesita archivos reales de origen para saber su forma exacta. Escribir un parser
+      contra un formato adivinado es exactamente el tipo de código sin poder probar que este
+      proyecto ha evitado en cada fase donde fue posible.
+- [ ] Pantalla de revisión de `customer_merge_candidates` / staging — mismo motivo: no tiene
+      sentido diseñar la UI de revisión antes de saber qué tan sucios/ambiguos son los datos
+      reales.
+- [ ] Migración de productos (doc 09 §4), pedidos históricos (§12), prospectos (§15) — usan la
+      misma `migration_batches` pero no tienen tabla de staging propia todavía; se agregan cuando
+      haya claridad sobre el origen real de cada uno.
+- [ ] `records_source`/`records_created`/etc. de `migration_batches` los llena quien corra el ETL
+      real — hoy no hay ningún proceso que los escriba.
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

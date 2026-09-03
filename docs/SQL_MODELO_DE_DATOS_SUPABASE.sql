@@ -37,8 +37,9 @@ create type prospect_stage as enum (
   'NEW','CONTACTED','INTERESTED','QUOTE','NEGOTIATION','WON','LOST'
 );
 
+-- LEGACY_IMPORTED: doc 09 §14, cotizaciones antiguas sin estado real conocido
 create type quote_status as enum (
-  'DRAFT','SENT','FOLLOW_UP','ACCEPTED','CONVERTED','LOST','EXPIRED','CANCELLED'
+  'DRAFT','SENT','FOLLOW_UP','ACCEPTED','CONVERTED','LOST','EXPIRED','CANCELLED','LEGACY_IMPORTED'
 );
 
 -- §10 doc 04 / §21 doc 04: histórico jamás puede llegar a INVOICING/INVOICED
@@ -54,8 +55,15 @@ create type order_status as enum (
 create type order_review_status as enum ('PENDING','APPROVED','RETURNED');
 
 -- Reutilizado por invoices e invoice_operations (mismo ciclo de vida fiscal, §16/§17/§14 doc 03/04)
+-- HISTORICAL: doc 09 §13, facturas del sistema anterior — nunca se emiten,
+-- solo se guarda la referencia (historical_invoice_number/historical_siigo_invoice_id)
 create type invoice_status as enum (
-  'PENDING','PROCESSING','ISSUED','UNCERTAIN','ERROR_RETRYABLE','ERROR_FINAL'
+  'PENDING','PROCESSING','ISSUED','UNCERTAIN','ERROR_RETRYABLE','ERROR_FINAL','HISTORICAL'
+);
+
+-- doc 09 §5-19: ciclo de vida de una fila en customer_import_staging
+create type import_status as enum (
+  'PENDING','NORMALIZED','DEDUPE_REVIEW','READY','IMPORTED','SKIPPED','FAILED'
 );
 
 create type follow_up_status as enum ('PENDING','COMPLETED','OVERDUE','CANCELLED');
@@ -540,6 +548,10 @@ create table invoices (
   invoice_date timestamptz,
   issued_by uuid not null references users(id),
   response_reference jsonb,
+
+  historical_invoice_number text,     -- doc 09 §13: factura del sistema anterior, nunca se emite
+  historical_siigo_invoice_id text,
+
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -691,7 +703,79 @@ create table ghl_webhook_events (
 );
 
 -- ============================================================================
--- 22. APP SETTINGS  (doc 02 §2 — catálogos configurables)
+-- 22. MIGRACIÓN  (doc 09, doc 10 §15 — infraestructura de staging, no el ETL en sí)
+-- ============================================================================
+
+-- doc 09 §17-19: cada lote de importación, con sus conteos antes/después.
+create table migration_batches (
+  id uuid primary key default gen_random_uuid(),
+  entity_type text not null,          -- 'CUSTOMERS' | 'PRODUCTS' | 'ORDERS' | 'QUOTES' | 'PROSPECTS'
+  label text,                         -- p.ej. "lote 1 = 50"
+  source_system text,                 -- 'SIIGO' | 'GHL' | 'SHEET' | 'APPS_SCRIPT'
+  records_source integer,             -- doc 09 §17: conteo en el origen, antes de importar
+  records_created integer not null default 0,
+  records_updated integer not null default 0,
+  records_skipped integer not null default 0,
+  records_failed integer not null default 0,
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  created_by uuid not null references users(id),
+  created_at timestamptz not null default now()
+);
+
+-- doc 09 §5-7: staging de clientes — nunca cargar directo a producción.
+-- Prioridad de dedup: documento > Siigo ID > GHL ID > teléfono+nombre >
+-- email > similitud de nombre — nunca fusionar solo por nombre.
+create table customer_import_staging (
+  id uuid primary key default gen_random_uuid(),
+  batch_id uuid not null references migration_batches(id),
+  source_system text not null,
+  source_id text,
+  raw_data jsonb not null,
+
+  document_type text,
+  document_number text,
+  document_number_normalized text,
+  phone text,
+  email text,
+  name text,
+  city text,
+
+  status import_status not null default 'PENDING',
+  match_customer_id uuid references customers(id),
+  match_reason text,
+  needs_review boolean not null default false,
+  review_notes text,
+
+  imported_customer_id uuid references customers(id),
+  error_message text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index customer_import_staging_batch_idx on customer_import_staging (batch_id);
+create index customer_import_staging_status_idx on customer_import_staging (status);
+create index customer_import_staging_doc_idx on customer_import_staging (document_number_normalized);
+
+-- doc 09 §8: candidatos de fusión que salen del dedupe — nunca se fusiona
+-- solo, siempre lo confirma un humano.
+create table customer_merge_candidates (
+  id uuid primary key default gen_random_uuid(),
+  customer_a uuid not null references customers(id),
+  customer_b uuid not null references customers(id),
+  reason text not null,
+  confidence text,
+  status text not null default 'PENDING',
+  reviewed_by uuid references users(id),
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index customer_merge_candidates_status_idx on customer_merge_candidates (status);
+
+-- ============================================================================
+-- 23. APP SETTINGS  (doc 02 §2 — catálogos configurables)
 -- ============================================================================
 
 create table app_settings (
@@ -703,7 +787,7 @@ create table app_settings (
 );
 
 -- ============================================================================
--- 23. updated_at automático (aplica a toda tabla con esa columna)
+-- 24. updated_at automático (aplica a toda tabla con esa columna)
 -- ============================================================================
 
 create or replace function set_updated_at() returns trigger as $$
@@ -725,7 +809,7 @@ begin
 end $$;
 
 -- ============================================================================
--- 24. VISTA customer_metrics  (doc 02 §23 — valores derivados, nunca hechos históricos)
+-- 25. VISTA customer_metrics  (doc 02 §23 — valores derivados, nunca hechos históricos)
 -- ============================================================================
 
 -- security_invoker: sin esto la vista corre con los privilegios de quien la
@@ -780,7 +864,7 @@ left join frequency fr on fr.customer_id = c.id
 group by c.id, fr.avg_days_between_orders;
 
 -- ============================================================================
--- 25. ROW LEVEL SECURITY  (doc 05 — seguridad real, no solo ocultar botones)
+-- 26. ROW LEVEL SECURITY  (doc 05 — seguridad real, no solo ocultar botones)
 -- ============================================================================
 
 create or replace function current_wow_role() returns user_role as $$
@@ -825,6 +909,9 @@ alter table integration_logs enable row level security;
 alter table sync_jobs enable row level security;
 alter table app_settings enable row level security;
 alter table ghl_webhook_events enable row level security;
+alter table migration_batches enable row level security;
+alter table customer_import_staging enable row level security;
+alter table customer_merge_candidates enable row level security;
 
 -- Usuarios: cualquier cuenta interna autenticada puede leer el directorio de
 -- usuarios (roster pequeño, 4 vendedoras + bodega + admin — necesario para
@@ -984,6 +1071,15 @@ create policy ghl_webhook_events_select on ghl_webhook_events for select
 create policy app_settings_update on app_settings for update
   using (current_wow_role() = 'ADMIN');
 
+-- Migración (doc 09): solo admin lee; toda escritura pasa por el backend
+-- con service_role, nunca desde el navegador — mismo patrón que sync_jobs.
+create policy migration_batches_select on migration_batches for select
+  using (current_wow_role() = 'ADMIN');
+create policy customer_import_staging_select on customer_import_staging for select
+  using (current_wow_role() = 'ADMIN');
+create policy customer_merge_candidates_select on customer_merge_candidates for select
+  using (current_wow_role() = 'ADMIN');
+
 -- Nota: las políticas de UPDATE para transiciones de estado (aprobar,
 -- devolver, facturar, despachar) se implementan como funciones RPC
 -- `security definer` que revalidan rol + estado antes de mutar, en vez de
@@ -992,7 +1088,7 @@ create policy app_settings_update on app_settings for update
 -- vs updates").
 
 -- ============================================================================
--- 26. Índices en columnas FK "quién hizo esto" (Supabase performance advisor)
+-- 27. Índices en columnas FK "quién hizo esto" (Supabase performance advisor)
 -- ============================================================================
 
 create index app_settings_updated_by_idx on app_settings (updated_by);

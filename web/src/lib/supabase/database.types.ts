@@ -263,6 +263,186 @@ export type Database = {
           },
         ]
       }
+      customer_import_staging: {
+        Row: {
+          batch_id: string
+          city: string | null
+          created_at: string
+          document_number: string | null
+          document_number_normalized: string | null
+          document_type: string | null
+          email: string | null
+          error_message: string | null
+          id: string
+          imported_customer_id: string | null
+          match_customer_id: string | null
+          match_reason: string | null
+          name: string | null
+          needs_review: boolean
+          phone: string | null
+          raw_data: Json
+          review_notes: string | null
+          source_id: string | null
+          source_system: string
+          status: Database["public"]["Enums"]["import_status"]
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          city?: string | null
+          created_at?: string
+          document_number?: string | null
+          document_number_normalized?: string | null
+          document_type?: string | null
+          email?: string | null
+          error_message?: string | null
+          id?: string
+          imported_customer_id?: string | null
+          match_customer_id?: string | null
+          match_reason?: string | null
+          name?: string | null
+          needs_review?: boolean
+          phone?: string | null
+          raw_data: Json
+          review_notes?: string | null
+          source_id?: string | null
+          source_system: string
+          status?: Database["public"]["Enums"]["import_status"]
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          city?: string | null
+          created_at?: string
+          document_number?: string | null
+          document_number_normalized?: string | null
+          document_type?: string | null
+          email?: string | null
+          error_message?: string | null
+          id?: string
+          imported_customer_id?: string | null
+          match_customer_id?: string | null
+          match_reason?: string | null
+          name?: string | null
+          needs_review?: boolean
+          phone?: string | null
+          raw_data?: Json
+          review_notes?: string | null
+          source_id?: string | null
+          source_system?: string
+          status?: Database["public"]["Enums"]["import_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_import_staging_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "migration_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_import_staging_imported_customer_id_fkey"
+            columns: ["imported_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_metrics"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_import_staging_imported_customer_id_fkey"
+            columns: ["imported_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_import_staging_match_customer_id_fkey"
+            columns: ["match_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_metrics"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_import_staging_match_customer_id_fkey"
+            columns: ["match_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_merge_candidates: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          customer_a: string
+          customer_b: string
+          id: string
+          reason: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          customer_a: string
+          customer_b: string
+          id?: string
+          reason: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          customer_a?: string
+          customer_b?: string
+          id?: string
+          reason?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_merge_candidates_customer_a_fkey"
+            columns: ["customer_a"]
+            isOneToOne: false
+            referencedRelation: "customer_metrics"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_merge_candidates_customer_a_fkey"
+            columns: ["customer_a"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_merge_candidates_customer_b_fkey"
+            columns: ["customer_b"]
+            isOneToOne: false
+            referencedRelation: "customer_metrics"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_merge_candidates_customer_b_fkey"
+            columns: ["customer_b"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_merge_candidates_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -626,6 +806,8 @@ export type Database = {
         Row: {
           created_at: string
           customer_id: string
+          historical_invoice_number: string | null
+          historical_siigo_invoice_id: string | null
           id: string
           invoice_date: string | null
           invoice_number: string | null
@@ -641,6 +823,8 @@ export type Database = {
         Insert: {
           created_at?: string
           customer_id: string
+          historical_invoice_number?: string | null
+          historical_siigo_invoice_id?: string | null
           id?: string
           invoice_date?: string | null
           invoice_number?: string | null
@@ -656,6 +840,8 @@ export type Database = {
         Update: {
           created_at?: string
           customer_id?: string
+          historical_invoice_number?: string | null
+          historical_siigo_invoice_id?: string | null
           id?: string
           invoice_date?: string | null
           invoice_number?: string | null
@@ -695,6 +881,62 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      migration_batches: {
+        Row: {
+          created_at: string
+          created_by: string
+          entity_type: string
+          finished_at: string | null
+          id: string
+          label: string | null
+          records_created: number
+          records_failed: number
+          records_skipped: number
+          records_source: number | null
+          records_updated: number
+          source_system: string | null
+          started_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          entity_type: string
+          finished_at?: string | null
+          id?: string
+          label?: string | null
+          records_created?: number
+          records_failed?: number
+          records_skipped?: number
+          records_source?: number | null
+          records_updated?: number
+          source_system?: string | null
+          started_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          entity_type?: string
+          finished_at?: string | null
+          id?: string
+          label?: string | null
+          records_created?: number
+          records_failed?: number
+          records_skipped?: number
+          records_source?: number | null
+          records_updated?: number
+          source_system?: string | null
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "migration_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -2246,6 +2488,14 @@ export type Database = {
         | "BLOCKED"
       follow_up_status: "PENDING" | "COMPLETED" | "OVERDUE" | "CANCELLED"
       ghl_sync_status: "PENDING" | "SYNCED" | "ERROR"
+      import_status:
+        | "PENDING"
+        | "NORMALIZED"
+        | "DEDUPE_REVIEW"
+        | "READY"
+        | "IMPORTED"
+        | "SKIPPED"
+        | "FAILED"
       integration_system: "SIIGO" | "GHL"
       invoice_status:
         | "PENDING"
@@ -2254,6 +2504,7 @@ export type Database = {
         | "UNCERTAIN"
         | "ERROR_RETRYABLE"
         | "ERROR_FINAL"
+        | "HISTORICAL"
       order_review_status: "PENDING" | "APPROVED" | "RETURNED"
       order_source_type: "LIVE" | "HISTORICAL" | "IMPORTED"
       order_status:
@@ -2287,6 +2538,7 @@ export type Database = {
         | "LOST"
         | "EXPIRED"
         | "CANCELLED"
+        | "LEGACY_IMPORTED"
       shipment_status: "PENDING" | "DISPATCHED" | "DELIVERED" | "CANCELLED"
       sync_job_status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED"
       user_role: "SELLER" | "WAREHOUSE" | "SUPERVISOR" | "ADMIN"
@@ -2444,6 +2696,15 @@ export const Constants = {
       ],
       follow_up_status: ["PENDING", "COMPLETED", "OVERDUE", "CANCELLED"],
       ghl_sync_status: ["PENDING", "SYNCED", "ERROR"],
+      import_status: [
+        "PENDING",
+        "NORMALIZED",
+        "DEDUPE_REVIEW",
+        "READY",
+        "IMPORTED",
+        "SKIPPED",
+        "FAILED",
+      ],
       integration_system: ["SIIGO", "GHL"],
       invoice_status: [
         "PENDING",
@@ -2452,6 +2713,7 @@ export const Constants = {
         "UNCERTAIN",
         "ERROR_RETRYABLE",
         "ERROR_FINAL",
+        "HISTORICAL",
       ],
       order_review_status: ["PENDING", "APPROVED", "RETURNED"],
       order_source_type: ["LIVE", "HISTORICAL", "IMPORTED"],
@@ -2488,6 +2750,7 @@ export const Constants = {
         "LOST",
         "EXPIRED",
         "CANCELLED",
+        "LEGACY_IMPORTED",
       ],
       shipment_status: ["PENDING", "DISPATCHED", "DELIVERED", "CANCELLED"],
       sync_job_status: ["PENDING", "RUNNING", "COMPLETED", "FAILED"],
