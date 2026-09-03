@@ -5,6 +5,7 @@ import { getCurrentProfile } from "@/lib/auth";
 import { OrderActions } from "./order-actions";
 import { OrderReviewPanel } from "./order-review-panel";
 import { OrderStockSyncButton } from "./order-stock-sync-button";
+import { InvoicePanel } from "./invoice-panel";
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
@@ -100,6 +101,41 @@ export default async function OrderDetailPage({
     !!profile &&
     (profile.id === order.seller_id || profile.role === "SUPERVISOR" || profile.role === "ADMIN");
   const canReview = isReviewer && order.status === "IN_REVIEW";
+  // doc 01 §18 / doc 05 §6: solo bodega o admin factura — supervisor queda
+  // fuera por defecto (doc 05 §6 lo marca "según política" sin definirla).
+  const canInvoice = !!profile && (profile.role === "WAREHOUSE" || profile.role === "ADMIN");
+  const isAdmin = profile?.role === "ADMIN";
+
+  let isUncertain = false;
+  let uncertainMessage: string | null = null;
+  let invoiceInfo: { invoiceNumber: string | null; invoiceDate: string | null; total: number | null } | null = null;
+
+  if (order.status === "INVOICING" && isReviewer) {
+    const { data: operation } = await supabase
+      .from("invoice_operations")
+      .select("status, error_message")
+      .eq("order_id", order.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (operation?.status === "UNCERTAIN") {
+      isUncertain = true;
+      uncertainMessage = operation.error_message;
+    }
+  } else if (order.status === "INVOICED" && isReviewer) {
+    const { data: invoice } = await supabase
+      .from("invoices")
+      .select("invoice_number, invoice_date, total")
+      .eq("order_id", order.id)
+      .maybeSingle();
+    if (invoice) {
+      invoiceInfo = {
+        invoiceNumber: invoice.invoice_number,
+        invoiceDate: invoice.invoice_date,
+        total: invoice.total,
+      };
+    }
+  }
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
@@ -215,6 +251,21 @@ export default async function OrderDetailPage({
           <OrderReviewPanel orderId={order.id} />
         </div>
       )}
+
+      {(order.status === "APPROVED_FOR_INVOICE" || order.status === "INVOICING" || order.status === "INVOICED") &&
+        isReviewer && (
+          <div className="mt-6">
+            <InvoicePanel
+              orderId={order.id}
+              status={order.status}
+              canInvoice={canInvoice}
+              isAdmin={isAdmin}
+              isUncertain={isUncertain}
+              uncertainMessage={uncertainMessage}
+              invoice={invoiceInfo}
+            />
+          </div>
+        )}
 
       {canAct && (
         <div className="mt-6">

@@ -3,6 +3,9 @@ import type {
   SiigoCustomer,
   SiigoCustomerCreatePayload,
   SiigoCustomerListResponse,
+  SiigoInvoice,
+  SiigoInvoiceCreatePayload,
+  SiigoInvoiceListResponse,
   SiigoProduct,
 } from "./types";
 
@@ -26,6 +29,20 @@ export class SiigoApiError extends Error {
     this.name = "SiigoApiError";
     this.status = status;
     this.body = body;
+  }
+}
+
+// Cualquier falla que no sea una respuesta HTTP limpia con código de
+// estado (abort por timeout, conexión perdida, DNS) — doc 06 §17: "timeout
+// ≠ factura inexistente". No sabemos si Siigo alcanzó a procesar la
+// solicitud antes de perderse la respuesta, así que nunca se puede tratar
+// como "seguro que falló" ni como "seguro que funcionó" — el llamador debe
+// marcar la operación como UNCERTAIN y bloquear un nuevo intento hasta
+// reconciliar (doc 06 §18).
+export class SiigoUncertainError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SiigoUncertainError";
   }
 }
 
@@ -204,4 +221,156 @@ export function buildSiigoCustomerPayload(customer: WowCustomerForSiigo): SiigoC
   }
 
   return payload;
+}
+
+// ============================================================================
+// Facturación (Fase 7-8, doc 01 §18, doc 06 §12-19). NADA de lo que sigue se
+// probó contra la cuenta real — a diferencia de customer/product arriba, el
+// doc 06 da reglas para facturar pero ningún payload/respuesta real de
+// ejemplo. Construido con la máxima fidelidad posible al doc 06 y a la
+// referencia pública de Siigo, pero es la pieza de todo el proyecto que
+// menos se puede dar por buena sin la primera prueba real. Ver
+// docs/PENDIENTES.md § Fase 7-8 para el detalle exacto de qué falta probar.
+
+// Validado (doc 06 §19): único tipo de documento electrónico vigente en la
+// cuenta — no hay que elegir en tiempo de ejecución.
+export const SIIGO_INVOICE_DOCUMENT_TYPE_ID = 34963;
+
+// Validado (doc 06 §14): catálogo real de Retefuente de la cuenta de WOW.
+// 10% deliberadamente NO está — no se encontró en el catálogo real, y el
+// formulario de pedidos ya la excluye del selector desde la Fase 5. Si un
+// pedido trae un % sin mapeo aquí, facturar debe fallar alto y claro, nunca
+// inventar un id.
+const SIIGO_RETENTION_ID_BY_PERCENT: Record<string, number> = {
+  "1": 2970,
+  "2": 2969,
+  "2.5": 2956,
+  "3.5": 2967,
+  "4": 2955,
+  "6": 2954,
+  "7": 2968,
+  "11": 18453,
+};
+
+export function getSiigoRetentionId(retentionPercent: number): number | null {
+  if (!retentionPercent) return null;
+  const id = SIIGO_RETENTION_ID_BY_PERCENT[String(retentionPercent)];
+  if (!id) {
+    throw new Error(
+      `Retención ${retentionPercent}% no tiene id de Siigo confirmado (doc 06 §14) — no se puede facturar este pedido`,
+    );
+  }
+  return id;
+}
+
+export type SiigoInvoiceOrderItemInput = {
+  code: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  discountValue: number;
+  siigoTaxId: number | null; // null = sin IVA en esta línea, se omite `taxes`
+};
+
+export type SiigoInvoiceOrderInput = {
+  orderNumber: string;
+  grandTotal: number;
+  retentionPercent: number;
+  siigoCustomerId: string;
+  costCenter: number;
+  paymentTypeId: number;
+  sellerSiigoId?: number;
+  items: SiigoInvoiceOrderItemInput[];
+};
+
+// Ensambla el payload a partir de valores YA resueltos (ids de Siigo para
+// impuesto/forma de pago/centro de costo ya buscados por el llamador —
+// esta función no toca la base de datos, solo arma el JSON, para poder
+// probarla sola sin red ni Supabase, igual que buildSiigoCustomerPayload).
+export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoInvoiceCreatePayload {
+  const retentionId = getSiigoRetentionId(input.retentionPercent);
+
+  const payload: SiigoInvoiceCreatePayload = {
+    document: { id: SIIGO_INVOICE_DOCUMENT_TYPE_ID },
+    date: new Date().toISOString().slice(0, 10),
+    customer: { id: input.siigoCustomerId },
+    cost_center: input.costCenter,
+    observations: `Pedido WOW ${input.orderNumber}`,
+    items: input.items.map((item) => ({
+      code: item.code,
+      description: item.name,
+      quantity: item.quantity,
+      price: item.unitPrice,
+      discount: item.discountValue || undefined,
+      taxes: item.siigoTaxId ? [{ id: item.siigoTaxId }] : undefined,
+    })),
+    payments: [{ id: input.paymentTypeId, value: input.grandTotal }],
+  };
+
+  if (input.sellerSiigoId) payload.seller = input.sellerSiigoId;
+  if (retentionId) payload.retentions = [{ id: retentionId }];
+
+  return payload;
+}
+
+// doc 06 §17: timeout ≠ factura inexistente. Cualquier fallo que no sea una
+// respuesta HTTP limpia (abort por `timeoutMs`, conexión perdida) se
+// reporta como SiigoUncertainError — nunca como "seguro que no se creó".
+export async function createSiigoInvoice(
+  payload: SiigoInvoiceCreatePayload,
+  timeoutMs = 25_000,
+): Promise<SiigoInvoice> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await siigoFetch("/v1/invoices", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    throw new SiigoUncertainError(
+      err instanceof Error ? err.message : "Fallo de red incierto creando la factura en Siigo",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    throw new SiigoApiError("Error creando factura en Siigo", res.status, await safeText(res));
+  }
+  return (await res.json()) as SiigoInvoice;
+}
+
+export async function getSiigoInvoice(siigoInvoiceId: string): Promise<SiigoInvoice | null> {
+  const res = await siigoFetch(`/v1/invoices/${encodeURIComponent(siigoInvoiceId)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new SiigoApiError("Error consultando factura en Siigo", res.status, await safeText(res));
+  }
+  return (await res.json()) as SiigoInvoice;
+}
+
+// Para reconciliación (doc 06 §18): buscar por cliente + ventana de fecha
+// alrededor del intento incierto. Heurística, no una búsqueda exacta por
+// referencia — Siigo no confirmó (doc 06) que exponga un campo de
+// referencia externa buscable. El resultado se muestra a un humano
+// (ADMIN) para confirmar, nunca se asocia solo.
+export async function listSiigoInvoices(params: {
+  customerId?: string;
+  createdStart?: string;
+  createdEnd?: string;
+}): Promise<SiigoInvoice[]> {
+  const query = new URLSearchParams();
+  if (params.customerId) query.set("customer_id", params.customerId);
+  if (params.createdStart) query.set("created_start", params.createdStart);
+  if (params.createdEnd) query.set("created_end", params.createdEnd);
+
+  const res = await siigoFetch(`/v1/invoices?${query.toString()}`);
+  if (!res.ok) {
+    throw new SiigoApiError("Error listando facturas en Siigo", res.status, await safeText(res));
+  }
+  const data = (await res.json()) as SiigoInvoiceListResponse;
+  return data.results ?? [];
 }

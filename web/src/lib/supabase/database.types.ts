@@ -888,6 +888,7 @@ export type Database = {
           payment_method_detail: string | null
           price_list: string | null
           responsible_customer_owner_id: string
+          retention_percent: number
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
@@ -929,6 +930,7 @@ export type Database = {
           payment_method_detail?: string | null
           price_list?: string | null
           responsible_customer_owner_id: string
+          retention_percent?: number
           retention_total?: number
           return_reason?: string | null
           review_started_at?: string | null
@@ -970,6 +972,7 @@ export type Database = {
           payment_method_detail?: string | null
           price_list?: string | null
           responsible_customer_owner_id?: string
+          retention_percent?: number
           retention_total?: number
           return_reason?: string | null
           review_started_at?: string | null
@@ -1621,6 +1624,7 @@ export type Database = {
           payment_method_detail: string | null
           price_list: string | null
           responsible_customer_owner_id: string
+          retention_percent: number
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
@@ -1671,6 +1675,7 @@ export type Database = {
           payment_method_detail: string | null
           price_list: string | null
           responsible_customer_owner_id: string
+          retention_percent: number
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
@@ -1788,6 +1793,7 @@ export type Database = {
           payment_method_detail: string | null
           price_list: string | null
           responsible_customer_owner_id: string
+          retention_percent: number
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
@@ -1959,6 +1965,7 @@ export type Database = {
           payment_method_detail: string | null
           price_list: string | null
           responsible_customer_owner_id: string
+          retention_percent: number
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
@@ -2041,6 +2048,7 @@ export type Database = {
           payment_method_detail: string | null
           price_list: string | null
           responsible_customer_owner_id: string
+          retention_percent: number
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
@@ -2091,6 +2099,7 @@ export type Database = {
           payment_method_detail: string | null
           price_list: string | null
           responsible_customer_owner_id: string
+          retention_percent: number
           retention_total: number
           return_reason: string | null
           review_started_at: string | null

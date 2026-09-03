@@ -329,6 +329,7 @@ create table orders (
   discount_total numeric(14,2) not null default 0,
   subtotal_net numeric(14,2) not null default 0,
   tax_total numeric(14,2) not null default 0,
+  retention_percent numeric(5,2) not null default 0,   -- % aplicado (doc 06 §14: elige el id de Retefuente en Siigo)
   retention_total numeric(14,2) not null default 0,
   grand_total numeric(14,2) not null default 0,
 

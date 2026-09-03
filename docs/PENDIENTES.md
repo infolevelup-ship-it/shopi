@@ -27,6 +27,10 @@ perderse en el chat. Se resuelve al final de cada fase o cuando se decida explí
       `/auth`, `/v1/customers` (búsqueda y creación) y `/v1/products/{id}`, y que el mapeo
       `document_type -> id_type` (NIT 31, CC 13, CE 22, PAS 41, TI 12 — catálogo público DIAN/Siigo,
       no específico de la cuenta) sea aceptado sin 4xx.
+- [ ] Antes de poder facturar un solo pedido real: configurar `app_settings.siigo_payment_types` y
+      `app_settings.siigo_tax_ids` con los ids reales de Siigo (ver § Fase 8 abajo para el SQL
+      exacto) — hoy no existen esos datos, `InvoiceService` fallará con un error claro hasta que se
+      configuren.
 
 ## Validación contra Siigo — puntos aún sin cerrar (doc 01 §68)
 
@@ -195,25 +199,16 @@ Verificado con sesiones simuladas: la vendedora ve `return_reason` en su pedido 
 `select count(*) from order_reviews` para ese mismo pedido le da `0` filas (RLS bloqueando el
 checklist interno, como se esperaba).
 
-## Fase 7 (Siigo) — construido parcialmente a propósito, facturar queda fuera
+## Fase 7 (Siigo) — lectura, crear cliente, y (más tarde) facturar
 
-Alcance de esta pasada, decidido explícitamente con el usuario dado que esta sesión no tiene salida
-de red hacia `api.siigo.com` (política de organización, confirmado con `curl` — mismo bloqueo que
-en la sesión anterior): solo lectura (auth, clientes, productos/stock) + crear cliente, que son de
-bajo riesgo (idempotentes, un 4xx de validación es el peor caso). **Facturar NO se construyó.**
+Primera pasada: solo lectura (auth, clientes, productos/stock) + crear cliente, decidido
+explícitamente con el usuario dado que esta sesión no tiene salida de red hacia `api.siigo.com`
+(política de organización, confirmado con `curl`). Facturar se dejó fuera a propósito en ese
+momento — ver más abajo, § Fase 8, para lo que pasó después: el usuario pidió construirlo igual,
+sabiendo que quedaría sin poder probarse contra la cuenta real.
 
-- [ ] `InvoiceService` (doc 01 §18, doc 06 §12-19) — deliberadamente no construido. Es la operación
-      más crítica de todo el sistema: emite un documento fiscal real ante la DIAN que "no se
-      elimina como un pedido normal" (doc 08 §16). Construirla sin poder probarla ni una sola vez
-      contra la cuenta real — con reconciliación de timeouts sin diseñar (doc 06 §18,
-      `SiigoReconciliationService` sigue sin existir) y con la retención al 10% todavía sin
-      confirmar en el catálogo (doc 06 §14) — era exactamente el tipo de acción "difícil de
-      revertir" que vale la pena parar a confirmar antes de tomar, no un lugar para ir rápido.
-      Retomar cuando: (a) haya credenciales reales usables desde algún entorno con salida de red
-      (esta sesión, o Vercel una vez conectado — pendiente arriba), y (b) estén cerrados los puntos
-      de la sección "Validación contra Siigo" de arriba.
-- [ ] `SiigoReconciliationService` (doc 06 §18) — no existe todavía; depende de que exista
-      `InvoiceService` primero.
+- [x] `InvoiceService` — construido en la misma sesión, más tarde (ver § Fase 8 abajo), a pedido
+      explícito del usuario tras confirmar que no había forma de probarlo en vivo desde aquí.
 - [ ] Sincronización de productos hacia Siigo (`PRODUCT_SYNC`, doc 06 §11) — no se construyó
       creación/actualización de productos desde WOW hacia Siigo. El doc 10 §10 tampoco la pide
       ("Después: create customer" — nunca "create product"); WOW solo lee productos que ya existen
@@ -237,6 +232,85 @@ bajo riesgo (idempotentes, un 4xx de validación es el peor caso). **Facturar NO
       en la Fase 3 (todavía la mayoría, sin sincronización real de catálogo) no tienen ese campo y
       quedan "sin datos". Es exactamente el hueco que ya estaba anotado en la Fase 3
       ("Sincronización real con Siigo").
+
+## Fase 8 (seguridad fiscal) — InvoiceService construido sin poder probarlo contra Siigo real
+
+Al llegar a esta fase (doc 10 §11: idempotencia, `invoice_operations`, timeouts, `UNCERTAIN`,
+reconciliación, auditoría), quedó claro que depende por completo de la llamada de facturación que
+la Fase 7 había dejado fuera a propósito. Se le preguntó al usuario cómo seguir (saltar a GHL,
+construir todo sin poder probarlo, o intentar con credenciales reales) — pegó credenciales reales
+en el chat, pero la llamada de prueba la bloqueó el clasificador de seguridad de Claude Code antes
+de siquiera llegar a la red (aparte del bloqueo de red a `api.siigo.com` ya confirmado antes, este
+fue un bloqueo distinto, del propio Claude Code). Con las dos rutas de prueba agotadas, el usuario
+pidió explícitamente construir `InvoiceService` completo de todas formas, aceptando que quedaría
+sin ninguna validación real. **Esta es la pieza más crítica y menos probada de todo el proyecto —
+no se toca en producción sin antes correr, como mínimo, los "10 obligatorias" de doc 06 §20.**
+
+Lo que sí se pudo verificar sin salir a red, contra el proyecto real de Supabase (con sesiones JWT
+simuladas y rollback, mismo rigor que las fases anteriores):
+
+- La máquina de estados completa `APPROVED_FOR_INVOICE -> INVOICING -> INVOICED` y el reclamo
+  atómico (`UPDATE ... WHERE status = 'APPROVED_FOR_INVOICE'`) que evita que dos personas (o un
+  doble clic) facturen el mismo pedido dos veces — doc 06 §20 lo marca como prueba obligatoria;
+  verificado explícitamente: el primer reclamo afecta 1 fila, el segundo intento sobre el mismo
+  pedido afecta 0.
+- Que un `UNCERTAIN` (timeout) NUNCA revierte el pedido a `APPROVED_FOR_INVOICE` — se queda
+  "atascado" en `INVOICING` a propósito hasta que alguien reconcilie, exactamente lo que doc 06 §17
+  exige ("timeout ≠ factura inexistente").
+- El flujo completo de reconciliación manual: `UNCERTAIN` -> confirmar que sí se emitió -> insertar
+  `invoices`, mover el pedido a `INVOICED`. Los nombres de columna, tipos y relaciones entre
+  `orders`/`invoice_operations`/`invoices` son correctos (se insertaron/actualizaron sin error).
+  También se verificó por separado, con un script de Node sin red, que `buildSiigoInvoicePayload`
+  arma el JSON correcto para el caso real de Fase 5 (4 unidades, 10% descuento, 2.5% retención ->
+  id 2956, confirmado en doc 06 §14) y que **rechaza** con un error claro un intento de retención al
+  10% en vez de inventar un id.
+
+Lo que **no** se pudo verificar, porque necesita una respuesta real de Siigo:
+
+- [ ] La forma exacta de la respuesta de `POST /v1/invoices` (¿el campo es `id`, `name`, `number`?
+      ¿trae `stamp.status`?) — `web/src/lib/siigo/types.ts` sigue la referencia pública, no un
+      ejemplo real.
+- [ ] Si Siigo de verdad devuelve 4xx/429/5xx como se espera, o algo distinto (por ejemplo, 200 con
+      un cuerpo de error) — la clasificación ERROR_FINAL vs ERROR_RETRYABLE depende de esto.
+- [ ] El campo `code` de cada línea de factura: se está mandando `product_code_snapshot` (el SKU),
+      asumiendo que Siigo identifica el producto de la factura por su código, no por su id interno
+      — no confirmado.
+- [ ] El campo `discount` por línea: se manda como valor monetario (`discount_value`), no como
+      porcentaje — Siigo podría esperar otra forma.
+- [ ] Si Siigo exige un campo `seller` (vendedor) — WOW no tiene mapeo `users -> siigo seller id`
+      todavía; se omite el campo si no está configurado en `app_settings.siigo_seller_map`, lo cual
+      podría fallar con un 4xx si Siigo lo exige.
+- [ ] La heurística de reconciliación (`searchSiigoInvoiceCandidatesAction`) busca por
+      `customer_id` + ventana de fecha de ±1 hora alrededor del intento — nunca se confirmó que
+      `GET /v1/invoices` acepte esos filtros exactos (`created_start`/`created_end`/`customer_id`).
+      Por diseño nunca asocia sola: siempre le muestra los candidatos a un ADMIN para confirmar.
+
+**Configuración obligatoria antes de poder facturar un solo pedido real** — `InvoiceService` falla
+con un error claro (nunca inventa un valor) si falta cualquiera de estos en `app_settings`:
+
+```sql
+-- Forma de pago WOW -> id de forma de pago en Siigo (NO confirmado, sin datos reales todavía)
+insert into app_settings (key, value) values (
+  'siigo_payment_types',
+  '{"contado": 0, "credito_15": 0, "credito_30": 0, "credito_45": 0, "credito_60": 0, "contra_entrega": 0}'
+);
+-- % de IVA -> id de impuesto en Siigo (NO confirmado; doc 06 §14 solo confirmó que existen IVA 0%/19% en la cuenta, sin ids)
+insert into app_settings (key, value) values ('siigo_tax_ids', '{"0": 0, "19": 0}');
+-- Centro de costo: opcional, default 86 (PUBLICO) si no se configura — doc 06 §22
+insert into app_settings (key, value) values ('siigo_cost_center', '86');
+-- Vendedor WOW -> id de vendedor en Siigo: opcional, se omite el campo si falta
+insert into app_settings (key, value) values ('siigo_seller_map', '{}');
+```
+
+- [ ] No se construyó una pantalla de administración para estos `app_settings` — no tenía sentido
+      construir un formulario bonito para valores que hoy nadie conoce (dependen de credenciales
+      reales que no se pudieron usar). Fast-follow una vez existan los ids reales.
+- [ ] Rol para facturar: solo `WAREHOUSE`/`ADMIN` — `SUPERVISOR` queda fuera porque doc 05 §6 lo
+      marca "según política" sin definir cuál. Cambiar es una línea en
+      `web/src/lib/actions/invoices.ts` (`invoiceOrderAction`) una vez se decida.
+- [ ] Job de reintento automático para `ERROR_RETRYABLE` — hoy el reintento es manual (el usuario
+      vuelve a apretar "Facturar"); doc 06 no exige que sea automático, pero sería un fast-follow
+      razonable una vez esté probado en producción.
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

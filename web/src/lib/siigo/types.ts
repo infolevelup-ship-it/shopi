@@ -52,6 +52,54 @@ export type SiigoCustomerListResponse = {
   pagination?: { page: number; page_size: number; total_results: number };
 };
 
+// Payload y respuesta de factura. A diferencia de SiigoCustomer, NINGUNA
+// parte de este shape se validó contra la cuenta real (doc 06 §12/§19 dan
+// reglas, no un ejemplo de payload/respuesta real) — sigue la referencia
+// pública de la API de Siigo. Ver docs/PENDIENTES.md § Fase 7-8.
+export type SiigoInvoiceItem = {
+  code: string;
+  description?: string;
+  quantity: number;
+  price: number;
+  discount?: number;
+  taxes?: { id: number }[];
+};
+
+export type SiigoInvoicePayment = {
+  id: number;
+  value: number;
+  due_date?: string;
+};
+
+export type SiigoInvoiceCreatePayload = {
+  document: { id: number };
+  date: string; // YYYY-MM-DD
+  customer: { id: string };
+  cost_center?: number;
+  seller?: number;
+  observations?: string;
+  items: SiigoInvoiceItem[];
+  payments: SiigoInvoicePayment[];
+  retentions?: { id: number }[];
+};
+
+export type SiigoInvoice = {
+  id: string;
+  document?: { id: number };
+  number?: number;
+  name?: string; // p.ej. "FV-4-36756" (doc 06 §19)
+  date?: string;
+  customer?: { id: string; identification?: string };
+  total?: number;
+  stamp?: { status?: string };
+  mail?: { status?: string };
+};
+
+export type SiigoInvoiceListResponse = {
+  results: SiigoInvoice[];
+  pagination?: { page: number; page_size: number; total_results: number };
+};
+
 // Payload de creación — mismo shape que SiigoCustomer sin `id`/`active`.
 export type SiigoCustomerCreatePayload = {
   person_type: "Person" | "Company";
