@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 
 export type CurrentProfile = {
+  id: string;
   name: string;
   role: string;
   active: boolean;
@@ -18,7 +19,7 @@ export async function getCurrentProfile(): Promise<CurrentProfile> {
 
   const { data } = await supabase
     .from("users")
-    .select("name, role, active")
+    .select("id, name, role, active")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 

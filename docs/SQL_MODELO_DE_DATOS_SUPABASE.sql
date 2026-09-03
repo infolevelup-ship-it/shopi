@@ -811,8 +811,15 @@ create policy quotes_select on quotes for select
     seller_id = current_wow_user_id()
     or current_wow_role() in ('WAREHOUSE','SUPERVISOR','ADMIN')
   );
+-- OJO: "seller_id = current_wow_user_id()" solo por sí sola NO restringe
+-- nada — cualquier rol (incluida bodega) puede insertar poniéndose a sí
+-- mismo como seller_id. Hace falta exigir el rol explícitamente primero
+-- (doc 01 §4.1-4.3: solo SELLER/SUPERVISOR/ADMIN crean cotizaciones).
 create policy quotes_insert on quotes for insert
-  with check (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+  with check (
+    current_wow_role() in ('SELLER','SUPERVISOR','ADMIN')
+    and (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'))
+  );
 
 create policy quote_items_select on quote_items for select
   using (exists (select 1 from quotes q where q.id = quote_items.quote_id));
@@ -825,8 +832,13 @@ create policy orders_select on orders for select
     seller_id = current_wow_user_id()
     or current_wow_role() in ('WAREHOUSE','SUPERVISOR','ADMIN')
   );
+-- Mismo cuidado que en quotes_insert: exigir el rol explícitamente, no solo
+-- "seller_id = uno mismo" (eso lo cumple cualquier rol trivialmente).
 create policy orders_insert on orders for insert
-  with check (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+  with check (
+    current_wow_role() in ('SELLER','SUPERVISOR','ADMIN')
+    and (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'))
+  );
 
 create policy order_items_select on order_items for select
   using (exists (select 1 from orders o where o.id = order_items.order_id));

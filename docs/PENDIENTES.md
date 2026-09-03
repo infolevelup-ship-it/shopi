@@ -60,6 +60,43 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
 - [ ] Sincronización real con Siigo (Fase 7) — hasta entonces, todo producto se crea a mano por un
       admin y queda marcado "sin sincronizar con Siigo" (`siigo_product_id is null`).
 
+## Fase 4 (cotizaciones) — construido parcialmente, fast-follow pendiente
+
+- [ ] Editar cotización en borrador (hoy solo se puede crear, enviar, aceptar o perder — no editar
+      líneas después de creada).
+- [ ] Estado `FOLLOW_UP` (doc 04 §5 lo lista en el flujo) — no hay una acción manual para marcarlo,
+      se dejó fuera de V1 a propósito para no sobreconstruir (doc 01 §55).
+- [ ] Convertir cotización aceptada en pedido (`converted_order_id`, estado `CONVERTED`) — depende
+      de que exista `orders` con UI real, es decir de la Fase 5. Hoy una cotización `ACCEPTED` se
+      queda ahí sin siguiente paso automático.
+- [ ] Cotización vencida (`EXPIRED`) — no hay job/lógica que la marque automáticamente al pasar
+      `valid_until`.
+
+## Fase 4 (cotizaciones) — bug real encontrado y corregido, dejar registro
+
+`create_quote()` inicialmente terminaba con un `UPDATE` sobre `quotes` para grabar los totales ya
+calculados. La tabla tiene RLS activo **sin ninguna política de UPDATE** (a propósito — las
+transiciones de estado solo pasan por `send_quote`/`mark_quote_accepted`/`mark_quote_lost`,
+`SECURITY DEFINER`). Ese `UPDATE` no daba ningún error: simplemente no afectaba ninguna fila (RLS
+sin política = 0 filas visibles para actualizar) y dejaba `subtotal`/`grand_total` en `0` en
+silencio — cada cotización se habría creado con el total en cero, sin que nada lo avisara. Se
+encontró solo porque se probó el flujo completo (crear → enviar → aceptar) contra el proyecto real
+en vez de confiar en que "el SQL corrió sin error". Se corrigió calculando todos los totales antes
+del único `INSERT`, sin ningún `UPDATE` posterior — verificado con los números exactos
+(100.000 − 5.000 descuento + 18.050 IVA = 113.050) contra datos reales, con rollback después.
+**Lección para las próximas fases:** cualquier función que necesite "insertar y luego corregir con
+un UPDATE" sobre una tabla con RLS sin política de UPDATE debe rediseñarse para no necesitar ese
+UPDATE — no basta con que el SQL compile o corra sin excepción.
+
+## Fase 4 — hueco de RLS encontrado en Fase 1/2, corregido aquí
+
+`orders_insert` y `quotes_insert` (escritas en la Fase 1) dejaban crear pedidos/cotizaciones a
+**cualquier rol autenticado, incluida bodega** — la condición `seller_id = current_wow_user_id()`
+se cumple sola sin importar el rol, porque `seller_id` siempre es quien está llamando. Verificado
+en vivo: una sesión de bodega simulada SÍ podía crear una cotización antes del fix, y quedó
+bloqueada (`insufficient_privilege`) después. Doc 01 §4.1-4.3: solo `SELLER`/`SUPERVISOR`/`ADMIN`
+crean cotizaciones y pedidos.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in

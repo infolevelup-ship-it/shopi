@@ -68,9 +68,9 @@ begin
 end;
 $$;
 
--- CREATE FUNCTION otorga EXECUTE a PUBLIC automáticamente, y PUBLIC aplica a
--- todos los roles sin excepción — revocar solo de anon no basta, anon
--- seguiría heredando acceso vía PUBLIC (aprendido con current_wow_role() en
--- 0001_init.sql). Hay que revocar de PUBLIC directamente.
-revoke execute on function create_customer(text,text,text,text,text,text,text,text,text,text,text) from public;
+-- Supabase otorga EXECUTE a PUBLIC *y por separado* a anon/authenticated/
+-- service_role al crear la función — revocar solo de uno no basta (lo
+-- confirmamos en vivo: revocar de PUBLIC dejó a anon con acceso igual, hubo
+-- que revocar de anon aparte). Revocar de ambos explícitamente.
+revoke execute on function create_customer(text,text,text,text,text,text,text,text,text,text,text) from public, anon;
 grant execute on function create_customer(text,text,text,text,text,text,text,text,text,text,text) to authenticated;

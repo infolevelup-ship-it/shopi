@@ -1624,11 +1624,146 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_quote: {
+        Args: {
+          p_customer_id: string
+          p_items: Json
+          p_notes?: string
+          p_price_list?: string
+          p_valid_until?: string
+        }
+        Returns: {
+          accepted_at: string | null
+          converted_order_id: string | null
+          created_at: string
+          customer_id: string
+          discount_total: number
+          grand_total: number
+          id: string
+          lost_at: string | null
+          lost_reason: string | null
+          notes: string | null
+          price_list: string | null
+          quote_number: string
+          retention_total: number
+          seller_id: string
+          sent_at: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["quote_status"]
+          subtotal: number
+          tax_total: number
+          updated_at: string
+          valid_until: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "quotes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       current_wow_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
       current_wow_user_id: { Args: never; Returns: string }
+      mark_quote_accepted: {
+        Args: { p_quote_id: string }
+        Returns: {
+          accepted_at: string | null
+          converted_order_id: string | null
+          created_at: string
+          customer_id: string
+          discount_total: number
+          grand_total: number
+          id: string
+          lost_at: string | null
+          lost_reason: string | null
+          notes: string | null
+          price_list: string | null
+          quote_number: string
+          retention_total: number
+          seller_id: string
+          sent_at: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["quote_status"]
+          subtotal: number
+          tax_total: number
+          updated_at: string
+          valid_until: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "quotes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      mark_quote_lost: {
+        Args: { p_quote_id: string; p_reason: string }
+        Returns: {
+          accepted_at: string | null
+          converted_order_id: string | null
+          created_at: string
+          customer_id: string
+          discount_total: number
+          grand_total: number
+          id: string
+          lost_at: string | null
+          lost_reason: string | null
+          notes: string | null
+          price_list: string | null
+          quote_number: string
+          retention_total: number
+          seller_id: string
+          sent_at: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["quote_status"]
+          subtotal: number
+          tax_total: number
+          updated_at: string
+          valid_until: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "quotes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      next_quote_number: { Args: never; Returns: string }
+      send_quote: {
+        Args: { p_quote_id: string }
+        Returns: {
+          accepted_at: string | null
+          converted_order_id: string | null
+          created_at: string
+          customer_id: string
+          discount_total: number
+          grand_total: number
+          id: string
+          lost_at: string | null
+          lost_reason: string | null
+          notes: string | null
+          price_list: string | null
+          quote_number: string
+          retention_total: number
+          seller_id: string
+          sent_at: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["quote_status"]
+          subtotal: number
+          tax_total: number
+          updated_at: string
+          valid_until: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "quotes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       activity_type:
