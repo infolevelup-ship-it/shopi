@@ -6,6 +6,7 @@ import { OrderActions } from "./order-actions";
 import { OrderReviewPanel } from "./order-review-panel";
 import { OrderStockSyncButton } from "./order-stock-sync-button";
 import { InvoicePanel } from "./invoice-panel";
+import { GhlSyncStatus } from "./ghl-sync-status";
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
@@ -59,7 +60,7 @@ export default async function OrderDetailPage({
   const supabase = await createClient();
 
   const ORDER_SELECT =
-    "id, order_number, status, payment_method, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, return_reason, seller_id, customer:customers(legal_name, first_name, last_name, commercial_name), seller:users!orders_seller_id_fkey(name)";
+    "id, order_number, status, payment_method, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, return_reason, seller_id, ghl_sync_status, ghl_sync_error, customer:customers(legal_name, first_name, last_name, commercial_name), seller:users!orders_seller_id_fkey(name)";
 
   const [{ data: initialOrder }, profile] = await Promise.all([
     supabase.from("orders").select(ORDER_SELECT).eq("id", id).maybeSingle(),
@@ -270,6 +271,12 @@ export default async function OrderDetailPage({
       {canAct && (
         <div className="mt-6">
           <OrderActions orderId={order.id} status={order.status} />
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="mt-4">
+          <GhlSyncStatus orderId={order.id} status={order.ghl_sync_status} error={order.ghl_sync_error} />
         </div>
       )}
     </main>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { SiigoSyncButton } from "./siigo-sync-button";
+import { GhlSyncStatus } from "./ghl-sync-status";
 
 const ACTIVITY_LABEL: Record<string, string> = {
   CALL: "Llamada",
@@ -47,7 +48,7 @@ export default async function CustomerDetailPage({
     supabase
       .from("customers")
       .select(
-        "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, email, phone, address, city, status, created_at, siigo_customer_id, responsible:users!customers_responsible_user_id_fkey(name)",
+        "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, email, phone, address, city, status, created_at, siigo_customer_id, ghl_sync_status, ghl_sync_error, responsible:users!customers_responsible_user_id_fkey(name)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -123,6 +124,10 @@ export default async function CustomerDetailPage({
         ) : (
           <SiigoSyncButton customerId={customer.id} />
         ))}
+
+      {profile?.role === "ADMIN" && (
+        <GhlSyncStatus customerId={customer.id} status={customer.ghl_sync_status} error={customer.ghl_sync_error} />
+      )}
 
       <h2 className="mt-8 mb-3 text-sm font-semibold text-neutral-700">Actividad</h2>
       <div className="space-y-3">

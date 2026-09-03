@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { syncCustomerToGhlAction } from "@/lib/actions/ghl";
 
 function normalizeDocument(raw: string) {
   return raw.replace(/\D/g, "");
@@ -178,6 +179,10 @@ export async function createCustomerAction(
     }
     return { ok: false, error: error.message };
   }
+
+  // doc 07 §3/§9: best-effort — un fallo aquí nunca invalida al cliente
+  // que ya se creó en WOW, solo queda registrado para reintentar.
+  await syncCustomerToGhlAction(data!.id);
 
   return { ok: true, customerId: data!.id };
 }

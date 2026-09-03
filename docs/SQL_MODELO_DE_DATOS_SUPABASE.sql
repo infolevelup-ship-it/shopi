@@ -70,6 +70,8 @@ create type integration_system as enum ('SIIGO','GHL');
 
 create type sync_job_status as enum ('PENDING','RUNNING','COMPLETED','FAILED');
 
+create type ghl_sync_status as enum ('PENDING','SYNCED','ERROR');
+
 -- ============================================================================
 -- 2. USERS  (doc 02 §3)
 -- ============================================================================
@@ -134,6 +136,10 @@ create table customers (
 
   last_purchase_at timestamptz,
   last_contact_at timestamptz,
+
+  ghl_sync_status ghl_sync_status,   -- doc 07 §8-9: nunca invalida el cliente, solo informa
+  ghl_last_synced_at timestamptz,
+  ghl_sync_error text,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -356,6 +362,11 @@ create table orders (
   cancelled_by uuid references users(id),   -- doc 01 §46: nunca borrar, siempre CANCELLED con quién y por qué
   cancellation_reason text,
   return_reason text,   -- doc 01 §45: motivo de devolución de bodega, visible para la vendedora
+
+  ghl_sync_status ghl_sync_status,   -- doc 07 §8-9: nunca invalida el pedido, solo informa
+  ghl_last_synced_at timestamptz,
+  ghl_sync_error text,
+
   updated_at timestamptz not null default now()
 );
 
@@ -668,7 +679,19 @@ create table sync_jobs (
 );
 
 -- ============================================================================
--- 21. APP SETTINGS  (doc 02 §2 — catálogos configurables)
+-- 21. GHL WEBHOOK EVENTS  (doc 07 §11 — autenticar, deduplicar, registrar, procesar)
+-- ============================================================================
+
+create table ghl_webhook_events (
+  id uuid primary key default gen_random_uuid(),
+  ghl_event_key text not null unique,   -- hash del cuerpo si GHL no manda un id de evento estable
+  event_type text,
+  payload jsonb not null,
+  received_at timestamptz not null default now()
+);
+
+-- ============================================================================
+-- 22. APP SETTINGS  (doc 02 §2 — catálogos configurables)
 -- ============================================================================
 
 create table app_settings (
@@ -680,7 +703,7 @@ create table app_settings (
 );
 
 -- ============================================================================
--- 22. updated_at automático (aplica a toda tabla con esa columna)
+-- 23. updated_at automático (aplica a toda tabla con esa columna)
 -- ============================================================================
 
 create or replace function set_updated_at() returns trigger as $$
@@ -702,7 +725,7 @@ begin
 end $$;
 
 -- ============================================================================
--- 23. VISTA customer_metrics  (doc 02 §23 — valores derivados, nunca hechos históricos)
+-- 24. VISTA customer_metrics  (doc 02 §23 — valores derivados, nunca hechos históricos)
 -- ============================================================================
 
 -- security_invoker: sin esto la vista corre con los privilegios de quien la
@@ -724,7 +747,7 @@ left join follow_ups f on f.customer_id = c.id
 group by c.id;
 
 -- ============================================================================
--- 24. ROW LEVEL SECURITY  (doc 05 — seguridad real, no solo ocultar botones)
+-- 25. ROW LEVEL SECURITY  (doc 05 — seguridad real, no solo ocultar botones)
 -- ============================================================================
 
 create or replace function current_wow_role() returns user_role as $$
@@ -768,6 +791,7 @@ alter table audit_logs enable row level security;
 alter table integration_logs enable row level security;
 alter table sync_jobs enable row level security;
 alter table app_settings enable row level security;
+alter table ghl_webhook_events enable row level security;
 
 -- Usuarios: cualquier cuenta interna autenticada puede leer el directorio de
 -- usuarios (roster pequeño, 4 vendedoras + bodega + admin — necesario para
@@ -913,6 +937,11 @@ create policy app_settings_select on app_settings for select
   using (current_wow_role() is not null);
 create policy app_settings_insert on app_settings for insert
   with check (current_wow_role() = 'ADMIN');
+
+-- ghl_webhook_events: solo admin lee; el receptor del webhook escribe con
+-- service_role (doc 07 §11), nunca desde el navegador
+create policy ghl_webhook_events_select on ghl_webhook_events for select
+  using (current_wow_role() = 'ADMIN');
 create policy app_settings_update on app_settings for update
   using (current_wow_role() = 'ADMIN');
 
@@ -924,7 +953,7 @@ create policy app_settings_update on app_settings for update
 -- vs updates").
 
 -- ============================================================================
--- 25. Índices en columnas FK "quién hizo esto" (Supabase performance advisor)
+-- 26. Índices en columnas FK "quién hizo esto" (Supabase performance advisor)
 -- ============================================================================
 
 create index app_settings_updated_by_idx on app_settings (updated_by);
@@ -950,3 +979,8 @@ create index prospects_customer_id_idx on prospects (customer_id);
 create index quote_items_product_id_idx on quote_items (product_id);
 create index quotes_converted_order_idx on quotes (converted_order_id);
 create index shipments_dispatched_by_idx on shipments (dispatched_by);
+
+-- doc 07 §9: encontrar rápido qué clientes/pedidos quedaron con la
+-- sincronización a GHL en error, para el retry
+create index orders_ghl_sync_status_idx on orders (ghl_sync_status) where ghl_sync_status = 'ERROR';
+create index customers_ghl_sync_status_idx on customers (ghl_sync_status) where ghl_sync_status = 'ERROR';

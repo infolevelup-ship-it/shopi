@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { syncOrderToGhlAction } from "@/lib/actions/ghl";
 
 export type OrderSearchResult = {
   id: string;
@@ -97,6 +98,11 @@ export async function createOrderAction(
   if (error) {
     return { ok: false, error: error.message };
   }
+
+  // doc 07 §4/§9: best-effort — un fallo aquí nunca invalida el pedido
+  // que ya se creó en WOW, solo queda registrado para reintentar.
+  await syncOrderToGhlAction(data!.id);
+
   return { ok: true, orderId: data!.id };
 }
 

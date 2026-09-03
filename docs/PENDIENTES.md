@@ -31,6 +31,18 @@ perderse en el chat. Se resuelve al final de cada fase o cuando se decida explí
       `app_settings.siigo_tax_ids` con los ids reales de Siigo (ver § Fase 8 abajo para el SQL
       exacto) — hoy no existen esos datos, `InvoiceService` fallará con un error claro hasta que se
       configuren.
+- [ ] Pegar `GHL_PRIVATE_TOKEN` / `GHL_LOCATION_ID` / `GHL_WEBHOOK_SECRET` reales en `web/.env.local`
+      (y luego en Vercel) — variables ya reservadas desde la Fase 1, ahora en uso (Fase 9,
+      `web/src/lib/ghl/client.ts`). Igual que con Siigo: nunca las pegues en un mensaje que yo vaya
+      a commitear.
+- [ ] Antes de que un solo cliente/pedido se sincronice de verdad con GHL: configurar
+      `app_settings.ghl_pipeline_id` y `app_settings.ghl_pipeline_stage_id` con los ids reales del
+      pipeline "Adquisición B2B" (o el que se use) — el workflow legado solo da los *nombres*, no
+      los ids numéricos que la API v2 necesita.
+- [ ] Al crear un usuario en `public.users`, considera llenar `ghl_user_id` (columna que ya existe
+      desde la Fase 1) con el id real del usuario en GHL — sin esto, las oportunidades se crean sin
+      `assignedTo` (doc 07 §6, "owner"). No hay pantalla de administración de usuarios todavía
+      (fast-follow), así que hoy solo se puede llenar a mano vía SQL.
 
 ## Validación contra Siigo — puntos aún sin cerrar (doc 01 §68)
 
@@ -311,6 +323,71 @@ insert into app_settings (key, value) values ('siigo_seller_map', '{}');
 - [ ] Job de reintento automático para `ERROR_RETRYABLE` — hoy el reintento es manual (el usuario
       vuelve a apretar "Facturar"); doc 06 no exige que sea automático, pero sería un fast-follow
       razonable una vez esté probado en producción.
+
+## Fase 9 (GHL) — construido completo, sin poder validarlo contra la API real
+
+Mismo bloqueo de red que Siigo: esta sesión no tiene salida hacia `services.leadconnectorhq.com`
+(confirmado con `curl`, mismo 403 de política de organización). A diferencia de Siigo, el riesgo si
+algo sale mal es bajo — GHL es CRM y comunicación, nunca fiscal (doc 07 §17: "WOW controla el
+negocio") — así que se construyó el alcance completo del doc 10 §12 (contact upsert, opportunity,
+owner, sync, webhooks) de una vez, sin pasar por la conversación de riesgo que sí hizo falta para
+Siigo.
+
+Lo bueno: a diferencia de Siigo, para GHL sí existen datos reales de la cuenta —
+`docs/WORKFLOW_recibir_pedido_B2B_mapeos.md` documenta los `fieldKey` reales de ~30 custom fields
+(confirmados porque ya los usaba la automatización de Make/GHL antes de esta migración), incluidos
+dos ids numéricos reales (`Cliente State Code` = `u0AO64m1fA5ku2US9hq5`, `Cliente City Code` =
+`fhp1RsOsLaY3L3qjQhYc`, aunque el código no los usa directamente — se manda por `key`, no por
+`id`, ver abajo). `web/src/lib/ghl/client.ts` los usa tal cual, con los acentos rotos que GHL ya
+resuelve así (`tipo_de_identificacin`, `nmero_de_identificacin`).
+
+- [x] Contact upsert (doc 07 §3) — `syncCustomerToGhlAction`, se llama automáticamente al final de
+      `createCustomerAction` (Fase 2). Best-effort: si falla, el cliente en WOW queda creado igual
+      (doc 07 §9) y queda `ghl_sync_status = 'ERROR'` con el motivo, reintentable a mano.
+- [x] Opportunity (doc 07 §4) — `syncOrderToGhlAction`, se llama automáticamente al final de
+      `createOrderAction` (Fase 5). Si el cliente todavía no tiene `ghl_contact_id`, lo sincroniza
+      primero (mismo encadenamiento que Siigo con `siigo_customer_id` antes de facturar).
+- [x] Owner (doc 07 §6) — `users.ghl_user_id` (ya existía desde la Fase 1) se manda como
+      `assignedTo` de la oportunidad si está lleno; si no, se omite el campo en vez de fallar.
+- [x] Sync status (doc 07 §8-9) — columnas `ghl_sync_status`/`ghl_last_synced_at`/`ghl_sync_error`
+      en `customers` y `orders` (no existían, migración `0012`), con retry manual visible para
+      ADMIN en ambas fichas.
+- [x] Webhooks (doc 07 §11) — `POST /api/webhooks/ghl?secret=...`: autentica con secreto compartido
+      en la URL (GHL no documenta HMAC estándar para esto), deduplica con un hash SHA-256 del
+      cuerpo crudo como llave única (GHL no confirma un id de evento estable), y registra en
+      `ghl_webhook_events`. **A propósito NO procesa nada todavía** — doc 07 §12 es explícito:
+      "cambiar una etapa manualmente en GHL nunca debe crear una factura fiscal", así que mientras
+      no haya una razón concreta y seguura para actuar sobre un evento, el endpoint solo lo guarda.
+
+Simplificación deliberada vs. el workflow legado:
+
+- [ ] El Make/GHL legado tenía DOS pipelines con un router (cliente nuevo → "Adquisición B2B",
+      cliente recurrente → "Recompras B2B"). Esta versión usa un solo par
+      `app_settings.ghl_pipeline_id`/`ghl_pipeline_stage_id` fijo — WOW no tiene hoy un dato limpio
+      de "es la primera compra de este cliente" para replicar esa rama. Fast-follow si se necesita
+      esa distinción: `customers.status` (`PROSPECT` vs `ACTIVE`) ya casi lo resuelve.
+- [ ] `contacto_nombre`/`contacto_apellido`/`contacto_email` (persona de contacto secundaria en la
+      empresa, del mapeo legado) no se mandan — WOW no distingue esa persona del cliente mismo.
+- [ ] `lista_de_precio` y `cliente_nuevo` (custom fields de la oportunidad) tampoco se mandan — WOW
+      no tiene ese dato limpio en el pedido hoy.
+
+Lo que **no** se pudo verificar por falta de acceso real a GHL:
+
+- [ ] Que la API v2 acepte custom fields por `key` (fieldKey) en vez de por `id` numérico — se
+      asume que sí porque GHL resuelve los tokens `{{contact.X}}` por key en su editor, pero nunca
+      se confirmó contra el endpoint `/contacts/upsert`/`/opportunities/` en sí.
+- [ ] La forma exacta de la respuesta de `/contacts/upsert` y `/opportunities/` (¿siempre viene
+      `{contact: {...}}` / `{opportunity: {...}}`?) — `web/src/lib/ghl/types.ts` sigue la
+      referencia pública, no un ejemplo real.
+- [ ] Si `POST /opportunities/` de verdad requiere `pipelineId`+`pipelineStageId` juntos o alguna
+      otra combinación.
+
+Lo que sí se verificó sin red, contra el proyecto real de Supabase (con rollback) y con un script
+de Node: el dedup de `ghl_webhook_events` (segundo intento con la misma `ghl_event_key` rechazado
+por `unique_violation`, tal como el endpoint lo espera para responder "duplicate"), la escritura de
+las columnas de estado de sync, y que `buildGhlContactPayload` arma exactamente los `fieldKey`
+reales confirmados por el mapeo legado (NIT→31, CC→13, nombres de persona natural sin cortar,
+`companyName` solo para jurídica).
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

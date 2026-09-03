@@ -283,6 +283,9 @@ export type Database = {
           first_name: string | null
           fiscal_responsibility: string | null
           ghl_contact_id: string | null
+          ghl_last_synced_at: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           id: string
           is_duplicate_candidate: boolean
           last_contact_at: string | null
@@ -322,6 +325,11 @@ export type Database = {
           first_name?: string | null
           fiscal_responsibility?: string | null
           ghl_contact_id?: string | null
+          ghl_last_synced_at?: string | null
+          ghl_sync_error?: string | null
+          ghl_sync_status?:
+            | Database["public"]["Enums"]["ghl_sync_status"]
+            | null
           id?: string
           is_duplicate_candidate?: boolean
           last_contact_at?: string | null
@@ -361,6 +369,11 @@ export type Database = {
           first_name?: string | null
           fiscal_responsibility?: string | null
           ghl_contact_id?: string | null
+          ghl_last_synced_at?: string | null
+          ghl_sync_error?: string | null
+          ghl_sync_status?:
+            | Database["public"]["Enums"]["ghl_sync_status"]
+            | null
           id?: string
           is_duplicate_candidate?: boolean
           last_contact_at?: string | null
@@ -474,6 +487,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ghl_webhook_events: {
+        Row: {
+          event_type: string | null
+          ghl_event_key: string
+          id: string
+          payload: Json
+          received_at: string
+        }
+        Insert: {
+          event_type?: string | null
+          ghl_event_key: string
+          id?: string
+          payload: Json
+          received_at?: string
+        }
+        Update: {
+          event_type?: string | null
+          ghl_event_key?: string
+          id?: string
+          payload?: Json
+          received_at?: string
+        }
+        Relationships: []
       }
       integration_logs: {
         Row: {
@@ -875,7 +912,10 @@ export type Database = {
           dispatched_at: string | null
           dispatched_by: string | null
           document_type: string | null
+          ghl_last_synced_at: string | null
           ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           grand_total: number
           id: string
           invoice_number: string | null
@@ -917,7 +957,12 @@ export type Database = {
           dispatched_at?: string | null
           dispatched_by?: string | null
           document_type?: string | null
+          ghl_last_synced_at?: string | null
           ghl_opportunity_id?: string | null
+          ghl_sync_error?: string | null
+          ghl_sync_status?:
+            | Database["public"]["Enums"]["ghl_sync_status"]
+            | null
           grand_total?: number
           id?: string
           invoice_number?: string | null
@@ -959,7 +1004,12 @@ export type Database = {
           dispatched_at?: string | null
           dispatched_by?: string | null
           document_type?: string | null
+          ghl_last_synced_at?: string | null
           ghl_opportunity_id?: string | null
+          ghl_sync_error?: string | null
+          ghl_sync_status?:
+            | Database["public"]["Enums"]["ghl_sync_status"]
+            | null
           grand_total?: number
           id?: string
           invoice_number?: string | null
@@ -1611,7 +1661,10 @@ export type Database = {
           dispatched_at: string | null
           dispatched_by: string | null
           document_type: string | null
+          ghl_last_synced_at: string | null
           ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           grand_total: number
           id: string
           invoice_number: string | null
@@ -1662,7 +1715,10 @@ export type Database = {
           dispatched_at: string | null
           dispatched_by: string | null
           document_type: string | null
+          ghl_last_synced_at: string | null
           ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           grand_total: number
           id: string
           invoice_number: string | null
@@ -1730,6 +1786,9 @@ export type Database = {
           first_name: string | null
           fiscal_responsibility: string | null
           ghl_contact_id: string | null
+          ghl_last_synced_at: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           id: string
           is_duplicate_candidate: boolean
           last_contact_at: string | null
@@ -1780,7 +1839,10 @@ export type Database = {
           dispatched_at: string | null
           dispatched_by: string | null
           document_type: string | null
+          ghl_last_synced_at: string | null
           ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           grand_total: number
           id: string
           invoice_number: string | null
@@ -1952,7 +2014,10 @@ export type Database = {
           dispatched_at: string | null
           dispatched_by: string | null
           document_type: string | null
+          ghl_last_synced_at: string | null
           ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           grand_total: number
           id: string
           invoice_number: string | null
@@ -2035,7 +2100,10 @@ export type Database = {
           dispatched_at: string | null
           dispatched_by: string | null
           document_type: string | null
+          ghl_last_synced_at: string | null
           ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           grand_total: number
           id: string
           invoice_number: string | null
@@ -2086,7 +2154,10 @@ export type Database = {
           dispatched_at: string | null
           dispatched_by: string | null
           document_type: string | null
+          ghl_last_synced_at: string | null
           ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
           grand_total: number
           id: string
           invoice_number: string | null
@@ -2147,6 +2218,7 @@ export type Database = {
         | "RECOVERY"
         | "BLOCKED"
       follow_up_status: "PENDING" | "COMPLETED" | "OVERDUE" | "CANCELLED"
+      ghl_sync_status: "PENDING" | "SYNCED" | "ERROR"
       integration_system: "SIIGO" | "GHL"
       invoice_status:
         | "PENDING"
@@ -2344,6 +2416,7 @@ export const Constants = {
         "BLOCKED",
       ],
       follow_up_status: ["PENDING", "COMPLETED", "OVERDUE", "CANCELLED"],
+      ghl_sync_status: ["PENDING", "SYNCED", "ERROR"],
       integration_system: ["SIIGO", "GHL"],
       invoice_status: [
         "PENDING",
