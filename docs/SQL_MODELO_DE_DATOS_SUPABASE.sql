@@ -228,7 +228,10 @@ create index prospects_next_follow_up_idx on prospects (next_follow_up_at) where
 
 create table products (
   id uuid primary key default gen_random_uuid(),
-  siigo_product_id text not null,
+  -- null = todavía no sincronizado con Siigo (creado a mano en admin antes de
+  -- que exista la integración real, doc 10 Fase 7). El índice único de abajo
+  -- tolera múltiples NULL sin problema — Postgres no los considera iguales.
+  siigo_product_id text,
   code text not null,
   name text not null,
   brand text,

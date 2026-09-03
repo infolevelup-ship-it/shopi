@@ -54,12 +54,20 @@ export default async function HomePage() {
           <p className="mt-1 text-sm text-neutral-500">
             Rol: {ROLE_LABEL[profile.role] ?? profile.role}
           </p>
-          <Link
-            href="/customers"
-            className="mt-4 inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
-          >
-            Clientes
-          </Link>
+          <div className="mt-4 flex gap-2">
+            <Link
+              href="/customers"
+              className="inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
+            >
+              Clientes
+            </Link>
+            <Link
+              href="/products"
+              className="inline-block rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
+            >
+              Productos
+            </Link>
+          </div>
         </div>
       )}
     </main>
