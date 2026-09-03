@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { OrderActions } from "./order-actions";
+import { OrderReviewPanel } from "./order-review-panel";
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
@@ -55,24 +56,39 @@ export default async function OrderDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: order }, profile] = await Promise.all([
-    supabase
-      .from("orders")
-      .select(
-        "id, order_number, status, payment_method, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, seller_id, customer:customers(legal_name, first_name, last_name, commercial_name), seller:users!orders_seller_id_fkey(name)",
-      )
-      .eq("id", id)
-      .maybeSingle(),
+  const ORDER_SELECT =
+    "id, order_number, status, payment_method, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, return_reason, seller_id, customer:customers(legal_name, first_name, last_name, commercial_name), seller:users!orders_seller_id_fkey(name)";
+
+  const [{ data: initialOrder }, profile] = await Promise.all([
+    supabase.from("orders").select(ORDER_SELECT).eq("id", id).maybeSingle(),
     getCurrentProfile(),
   ]);
 
-  if (!order) {
+  if (!initialOrder) {
     notFound();
+  }
+
+  // Abrir el pedido como bodega/supervisor/admin inicia la revisión (doc 01
+  // §16: "al abrir el pedido" aparece el checklist) — SUBMITTED/PENDING_REVIEW
+  // -> IN_REVIEW, idempotente si ya estaba en revisión. Si falla (carrera con
+  // otra persona de bodega, o ya cambió de estado) se ignora: el resto de la
+  // página igual se renderiza con el estado que sí exista.
+  const isReviewer =
+    !!profile && (profile.role === "WAREHOUSE" || profile.role === "SUPERVISOR" || profile.role === "ADMIN");
+  let order = initialOrder;
+  if (isReviewer && (order.status === "SUBMITTED" || order.status === "PENDING_REVIEW")) {
+    const { data: reviewed } = await supabase.rpc("start_order_review", { p_order_id: id });
+    if (reviewed) {
+      const { data: refreshed } = await supabase.from("orders").select(ORDER_SELECT).eq("id", id).maybeSingle();
+      if (refreshed) order = refreshed;
+    }
   }
 
   const { data: items } = await supabase
     .from("order_items")
-    .select("id, product_name_snapshot, product_code_snapshot, quantity, unit_price, discount_value, tax_percent, line_total")
+    .select(
+      "id, product_name_snapshot, product_code_snapshot, quantity, unit_price, discount_value, tax_percent, line_total, product:products(stock_cache)",
+    )
     .eq("order_id", id)
     .order("created_at", { ascending: true });
 
@@ -82,6 +98,7 @@ export default async function OrderDetailPage({
   const canAct =
     !!profile &&
     (profile.id === order.seller_id || profile.role === "SUPERVISOR" || profile.role === "ADMIN");
+  const canReview = isReviewer && order.status === "IN_REVIEW";
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
@@ -107,6 +124,18 @@ export default async function OrderDetailPage({
           </p>
         )}
 
+        {order.status === "RETURNED_TO_SELLER" && order.return_reason && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
+            ⚠ Pedido devuelto para corrección: {order.return_reason}
+          </p>
+        )}
+
+        {order.status === "APPROVED_FOR_INVOICE" && (
+          <p className="mt-3 rounded-md border border-green-200 bg-green-50 p-2 text-sm text-green-800">
+            Aprobado para facturar — listo para que bodega/despacho inicie la facturación.
+          </p>
+        )}
+
         {order.payment_method && (
           <p className="mt-2 text-xs text-neutral-500">
             Forma de pago: {PAYMENT_LABEL[order.payment_method] ?? order.payment_method}
@@ -119,21 +148,30 @@ export default async function OrderDetailPage({
               <th className="pb-2">Producto</th>
               <th className="pb-2 text-right">Cant.</th>
               <th className="pb-2 text-right">Precio</th>
+              {isReviewer && <th className="pb-2 text-right">Stock</th>}
               <th className="pb-2 text-right">Total</th>
             </tr>
           </thead>
           <tbody>
-            {(items ?? []).map((item) => (
-              <tr key={item.id} className="border-b border-neutral-100">
-                <td className="py-2">
-                  {item.product_name_snapshot}
-                  <span className="ml-1 text-xs text-neutral-400">{item.product_code_snapshot}</span>
-                </td>
-                <td className="py-2 text-right">{item.quantity}</td>
-                <td className="py-2 text-right">{formatMoney(item.unit_price)}</td>
-                <td className="py-2 text-right">{formatMoney(item.line_total)}</td>
-              </tr>
-            ))}
+            {(items ?? []).map((item) => {
+              const product = Array.isArray(item.product) ? item.product[0] : item.product;
+              return (
+                <tr key={item.id} className="border-b border-neutral-100">
+                  <td className="py-2">
+                    {item.product_name_snapshot}
+                    <span className="ml-1 text-xs text-neutral-400">{item.product_code_snapshot}</span>
+                  </td>
+                  <td className="py-2 text-right">{item.quantity}</td>
+                  <td className="py-2 text-right">{formatMoney(item.unit_price)}</td>
+                  {isReviewer && (
+                    <td className="py-2 text-right text-neutral-500">
+                      {product?.stock_cache ?? "sin sincronizar"}
+                    </td>
+                  )}
+                  <td className="py-2 text-right">{formatMoney(item.line_total)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
@@ -168,6 +206,12 @@ export default async function OrderDetailPage({
           </p>
         )}
       </div>
+
+      {canReview && (
+        <div className="mt-6">
+          <OrderReviewPanel orderId={order.id} />
+        </div>
+      )}
 
       {canAct && (
         <div className="mt-6">

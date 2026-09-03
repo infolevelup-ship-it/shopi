@@ -889,6 +889,7 @@ export type Database = {
           price_list: string | null
           responsible_customer_owner_id: string
           retention_total: number
+          return_reason: string | null
           review_started_at: string | null
           seller_id: string
           siigo_invoice_id: string | null
@@ -929,6 +930,7 @@ export type Database = {
           price_list?: string | null
           responsible_customer_owner_id: string
           retention_total?: number
+          return_reason?: string | null
           review_started_at?: string | null
           seller_id: string
           siigo_invoice_id?: string | null
@@ -969,6 +971,7 @@ export type Database = {
           price_list?: string | null
           responsible_customer_owner_id?: string
           retention_total?: number
+          return_reason?: string | null
           review_started_at?: string | null
           seller_id?: string
           siigo_invoice_id?: string | null
@@ -1577,6 +1580,68 @@ export type Database = {
       }
     }
     Functions: {
+      approve_order_for_invoice: {
+        Args: {
+          p_customer_ok: boolean
+          p_fiscal_data_ok: boolean
+          p_inventory_ok: boolean
+          p_notes?: string
+          p_order_id: string
+          p_payment_ok: boolean
+          p_prices_ok: boolean
+          p_printed_receipt: boolean
+          p_products_ok: boolean
+          p_quantities_ok: boolean
+          p_receipts_ok: boolean
+        }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          channel: string | null
+          created_at: string
+          customer_id: string
+          delivered_at: string | null
+          discount_total: number
+          dispatched_at: string | null
+          dispatched_by: string | null
+          document_type: string | null
+          ghl_opportunity_id: string | null
+          grand_total: number
+          id: string
+          invoice_number: string | null
+          invoiced_at: string | null
+          invoiced_by: string | null
+          invoicing_started_at: string | null
+          notes: string | null
+          order_number: string
+          payment_method: string | null
+          payment_method_detail: string | null
+          price_list: string | null
+          responsible_customer_owner_id: string
+          retention_total: number
+          return_reason: string | null
+          review_started_at: string | null
+          seller_id: string
+          siigo_invoice_id: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["order_status"]
+          submitted_at: string | null
+          subtotal_gross: number
+          subtotal_net: number
+          tax_total: number
+          updated_at: string
+          warehouse_reviewed_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       cancel_order: {
         Args: { p_order_id: string; p_reason: string }
         Returns: {
@@ -1607,6 +1672,7 @@ export type Database = {
           price_list: string | null
           responsible_customer_owner_id: string
           retention_total: number
+          return_reason: string | null
           review_started_at: string | null
           seller_id: string
           siigo_invoice_id: string | null
@@ -1723,6 +1789,7 @@ export type Database = {
           price_list: string | null
           responsible_customer_owner_id: string
           retention_total: number
+          return_reason: string | null
           review_started_at: string | null
           seller_id: string
           siigo_invoice_id: string | null
@@ -1851,6 +1918,68 @@ export type Database = {
       }
       next_order_number: { Args: never; Returns: string }
       next_quote_number: { Args: never; Returns: string }
+      return_order_to_seller: {
+        Args: {
+          p_customer_ok?: boolean
+          p_fiscal_data_ok?: boolean
+          p_inventory_ok?: boolean
+          p_order_id: string
+          p_payment_ok?: boolean
+          p_prices_ok?: boolean
+          p_printed_receipt?: boolean
+          p_products_ok?: boolean
+          p_quantities_ok?: boolean
+          p_reason: string
+          p_receipts_ok?: boolean
+        }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          channel: string | null
+          created_at: string
+          customer_id: string
+          delivered_at: string | null
+          discount_total: number
+          dispatched_at: string | null
+          dispatched_by: string | null
+          document_type: string | null
+          ghl_opportunity_id: string | null
+          grand_total: number
+          id: string
+          invoice_number: string | null
+          invoiced_at: string | null
+          invoiced_by: string | null
+          invoicing_started_at: string | null
+          notes: string | null
+          order_number: string
+          payment_method: string | null
+          payment_method_detail: string | null
+          price_list: string | null
+          responsible_customer_owner_id: string
+          retention_total: number
+          return_reason: string | null
+          review_started_at: string | null
+          seller_id: string
+          siigo_invoice_id: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["order_status"]
+          submitted_at: string | null
+          subtotal_gross: number
+          subtotal_net: number
+          tax_total: number
+          updated_at: string
+          warehouse_reviewed_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       send_quote: {
         Args: { p_quote_id: string }
         Returns: {
@@ -1879,6 +2008,56 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "quotes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      start_order_review: {
+        Args: { p_order_id: string }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          channel: string | null
+          created_at: string
+          customer_id: string
+          delivered_at: string | null
+          discount_total: number
+          dispatched_at: string | null
+          dispatched_by: string | null
+          document_type: string | null
+          ghl_opportunity_id: string | null
+          grand_total: number
+          id: string
+          invoice_number: string | null
+          invoiced_at: string | null
+          invoiced_by: string | null
+          invoicing_started_at: string | null
+          notes: string | null
+          order_number: string
+          payment_method: string | null
+          payment_method_detail: string | null
+          price_list: string | null
+          responsible_customer_owner_id: string
+          retention_total: number
+          return_reason: string | null
+          review_started_at: string | null
+          seller_id: string
+          siigo_invoice_id: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["order_status"]
+          submitted_at: string | null
+          subtotal_gross: number
+          subtotal_net: number
+          tax_total: number
+          updated_at: string
+          warehouse_reviewed_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1913,6 +2092,7 @@ export type Database = {
           price_list: string | null
           responsible_customer_owner_id: string
           retention_total: number
+          return_reason: string | null
           review_started_at: string | null
           seller_id: string
           siigo_invoice_id: string | null

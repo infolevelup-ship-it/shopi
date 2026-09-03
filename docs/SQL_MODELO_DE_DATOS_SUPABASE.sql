@@ -354,6 +354,7 @@ create table orders (
   cancelled_at timestamptz,
   cancelled_by uuid references users(id),   -- doc 01 §46: nunca borrar, siempre CANCELLED con quién y por qué
   cancellation_reason text,
+  return_reason text,   -- doc 01 §45: motivo de devolución de bodega, visible para la vendedora
   updated_at timestamptz not null default now()
 );
 
@@ -938,6 +939,7 @@ create index order_items_product_id_idx on order_items (product_id);
 create index order_reviews_reviewed_by_idx on order_reviews (reviewed_by);
 create index order_status_history_changed_by_idx on order_status_history (changed_by);
 create index orders_approved_by_idx on orders (approved_by);
+create index orders_cancelled_by_idx on orders (cancelled_by);
 create index orders_dispatched_by_idx on orders (dispatched_by);
 create index orders_invoiced_by_idx on orders (invoiced_by);
 create index orders_responsible_owner_idx on orders (responsible_customer_owner_id);

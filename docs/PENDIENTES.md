@@ -138,6 +138,50 @@ unidades, 10% descuento, 2.5% retención → enviar): `400.000 − 40.000 descue
 9.000 retención = 419.400`, exacto, con el historial de estado y la actividad del cliente quedando
 registrados correctamente.
 
+## Fase 6 (bodega) — construido parcialmente, fast-follow pendiente
+
+- [ ] Impresión real del recibo (doc 01 §17) — el checklist tiene el punto "Recibo
+      impreso/verificado" pero hoy es solo una casilla que bodega marca de palabra; no genera
+      ningún PDF/representación imprimible todavía. Fast-follow natural, mismo motivo que ya
+      estaba anotado desde Fase 5.
+- [ ] Filtros de la cola "Urgentes"/"Con stock"/"Sin stock" (doc 08 §13) — no se construyeron:
+      dependen de `stock_cache` poblado de verdad (Fase 7, Siigo), y construir el filtro contra un
+      campo mayormente `null` hoy sería un filtro hueco. Solo quedó el orden por antigüedad
+      (más viejo primero) y el estado.
+- [ ] `PENDING_REVIEW` sigue sin ningún emisor — el enum existe (doc 04 §6) pero nada lo produce
+      todavía; la cola trata `SUBMITTED` como "recién llegado, sin tocar" y `IN_REVIEW` como
+      "alguien de bodega ya lo abrió". Si más adelante aparece una razón real para diferenciarlos
+      (p. ej. una validación automática entre enviar y revisar), se puede insertar ahí sin romper
+      nada — por ahora inventar esa distinción hubiera sido construir sin necesidad real (doc 01
+      §55).
+- [ ] No hay un "lock" real de concurrencia: si dos personas de bodega abren el mismo pedido casi
+      al tiempo, ambas pueden ver el checklist y actuar — `start_order_review` es idempotente
+      (reabrir no falla) pero no le impide a alguien más aprobar/devolver el mismo pedido que abrió
+      otra persona. No es un bug de datos (el estado sí cambia de forma consistente y la segunda
+      persona que intente actuar después de que el pedido ya salió de `IN_REVIEW` recibe el error
+      de estado), es una simplificación deliberada para un equipo pequeño — anotarlo por si crece
+      el equipo de bodega.
+- [ ] Historial completo de revisiones no se muestra en el detalle del pedido — `order_reviews`
+      guarda cada intento (aprobado o devuelto) pero la pantalla de pedido solo expone el motivo
+      de la devolución más reciente vía `orders.return_reason`. Ver también `docs/06_INTEGRACION_SIIGO.md`
+      Fase 7 antes de construir esto — puede tener sentido juntarlo con la pantalla de facturación.
+- [ ] Facturar (doc 01 §18) es Fase 7 explícitamente — `APPROVED_FOR_INVOICE` es el último estado
+      que toca esta fase; no hay ningún botón de facturar en ningún lado, a propósito.
+
+## Fase 6 — diseño: por qué `orders.return_reason` existe además de `order_reviews`
+
+El checklist de bodega (`order_reviews`) es intencionalmente invisible para la vendedora — RLS
+(`order_reviews_select`) solo deja verlo a WAREHOUSE/SUPERVISOR/ADMIN, porque es la herramienta de
+auditoría interna de bodega, no algo que la vendedora deba poder leer completo (puntuación
+producto por producto, notas internas, etc.). Pero doc 01 §45 exige explícitamente que la
+vendedora SÍ vea el motivo cuando le devuelven un pedido ("Pedido devuelto para corrección" +
+motivo visible). Para no aflojar el RLS del checklist completo solo para exponer un campo,
+`return_order_to_seller()` duplica el motivo en una columna nueva `orders.return_reason`, que sí
+es visible por la política `orders_select` que la vendedora ya usa para ver sus propios pedidos.
+Verificado con sesiones simuladas: la vendedora ve `return_reason` en su pedido devuelto, pero
+`select count(*) from order_reviews` para ese mismo pedido le da `0` filas (RLS bloqueando el
+checklist interno, como se esperaba).
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in
