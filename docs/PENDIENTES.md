@@ -389,6 +389,50 @@ las columnas de estado de sync, y que `buildGhlContactPayload` arma exactamente 
 reales confirmados por el mapeo legado (NIT→31, CC→13, nombres de persona natural sin cortar,
 `companyName` solo para jurídica).
 
+## Fase 10 (CRM) — seguimiento inteligente, riesgo, panel diario de la vendedora
+
+A diferencia de Siigo/GHL, esta fase no depende de ningún sistema externo — todo se pudo construir
+Y probar de verdad contra el proyecto real de Supabase (sesiones JWT simuladas, con rollback).
+
+- [x] Timeline (doc 01 §27) — ya existía desde la Fase 2 (`customer_activities` en la ficha del
+      cliente); no hizo falta construir nada nuevo aquí.
+- [x] Follow ups (doc 01 §28) — `follow_ups` ya existía desde la Fase 1 (tabla + RLS select/insert).
+      Se agregó `complete_follow_up()` (no había forma de completar uno, la tabla no tiene política
+      de UPDATE) y la UI para crear/completar desde la ficha del cliente.
+- [x] Risk / next purchase (doc 01 §28-29) — se extendió la vista `customer_metrics` (Fase 1) con
+      `avg_days_between_orders` (calculado de los huecos reales entre pedidos facturados
+      consecutivos, con `LAG()`), `estimated_next_purchase_at`, e `is_at_risk`. Verificado con datos
+      simulados: 3 pedidos facturados con huecos de 20 días → frecuencia 20, en el límite (20 días
+      desde la última) → no en riesgo; el mismo cliente con 60 días desde la última compra y la
+      misma frecuencia → sí en riesgo. La tolerancia (1.5× la frecuencia) es un primer valor
+      razonable, no un dato medido — doc 01 §58 es explícito: "la fórmula exacta se definirá
+      después de observar datos reales", así que esto se anota aquí a propósito para revisarlo
+      cuando haya datos reales de compra.
+- [x] Priorities (doc 01 §30/§58) — el panel diario de la vendedora (ahora la página `/` para rol
+      SELLER) muestra 3 categorías explicables (cliente fuera de ciclo, cotización abierta de alto
+      valor, pedido devuelto pendiente de corrección), cada una con su razón en texto plano — nunca
+      un puntaje compuesto. doc 01 §58 lo pide así explícitamente: "nunca debe ser una caja negra
+      sin explicación".
+- [x] Hueco de rol corregido de paso: `follow_ups_insert` (desde la Fase 1) tenía el mismo problema
+      ya visto en `orders_insert`/`quotes_insert` — "seller_id = uno mismo" no restringe nada,
+      cualquier rol lo cumple poniéndose a sí mismo. Verificado con sesión de bodega simulada:
+      bloqueada después del fix. doc 05: solo Seller "hace seguimiento".
+
+Deliberadamente fuera de esta pasada:
+
+- [ ] Dashboard de supervisor/admin (doc01 §32, "ventas por vendedora/cliente/producto") — es
+      territorio de la Fase 11 ("Reportes"), no de esta. El panel diario de doc 01 §30 es
+      explícitamente "la primera pantalla de la vendedora", no de los demás roles.
+- [ ] "Cliente de alto valor sin contacto" — doc 01 §30 lo lista como una 4ª categoría de
+      prioridad, pero necesita definir qué es "alto valor" con datos reales; se dejó fuera para no
+      inventar un umbral arbitrario (mismo criterio que ya se aplicó a la retención del 10% en
+      Siigo: no inventar valores sin base).
+- [ ] Notificaciones (doc 01 §57) — el panel muestra los mismos conteos "en la pantalla", pero no
+      hay push/email/WhatsApp todavía; es una capa aparte, no bloquea lo de esta fase.
+- [ ] Job que pase `follow_ups.status` de `PENDING` a `OVERDUE` automáticamente — el enum lo
+      contempla pero no hay infraestructura de jobs en este proyecto (todo es on-demand); "vencido"
+      se calcula al leer (`status = PENDING and scheduled_at < now()`), no se guarda.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in

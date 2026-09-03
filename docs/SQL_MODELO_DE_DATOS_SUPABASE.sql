@@ -730,7 +730,29 @@ end $$;
 
 -- security_invoker: sin esto la vista corre con los privilegios de quien la
 -- creó (de facto salta el RLS de quien consulta) — Postgres 15+.
+--
+-- Fase 10 (doc 01 §28-29/§58) agregó avg_days_between_orders/
+-- estimated_next_purchase_at/is_at_risk: frecuencia real calculada de los
+-- huecos entre pedidos facturados consecutivos (no un dato inventado), con
+-- una tolerancia de 50% sobre esa frecuencia como primer valor razonable
+-- hasta tener datos reales para ajustarlo — doc 01 §58 es explícito en que
+-- "la fórmula exacta se definirá después de observar datos reales" y que
+-- "nunca debe ser una caja negra sin explicación".
 create view customer_metrics with (security_invoker = true) as
+with invoiced_gaps as (
+  select
+    customer_id,
+    invoiced_at,
+    invoiced_at - lag(invoiced_at) over (partition by customer_id order by invoiced_at) as gap
+  from orders
+  where status = 'INVOICED' and invoiced_at is not null
+),
+frequency as (
+  select customer_id, avg(extract(epoch from gap) / 86400) as avg_days_between_orders
+  from invoiced_gaps
+  where gap is not null
+  group by customer_id
+)
 select
   c.id as customer_id,
   count(o.id) filter (where o.status not in ('CANCELLED')) as orders_count,
@@ -739,12 +761,23 @@ select
   max(o.invoiced_at) as last_order_at,
   extract(day from now() - max(o.invoiced_at)) as days_since_last_order,
   count(q.id) filter (where q.status in ('SENT','FOLLOW_UP')) as open_quotes_count,
-  count(f.id) filter (where f.status = 'PENDING') as open_followups_count
+  count(f.id) filter (where f.status = 'PENDING') as open_followups_count,
+  fr.avg_days_between_orders,
+  case
+    when fr.avg_days_between_orders is not null and max(o.invoiced_at) is not null
+    then max(o.invoiced_at) + make_interval(days => fr.avg_days_between_orders::int)
+    else null
+  end as estimated_next_purchase_at,
+  (
+    fr.avg_days_between_orders is not null
+    and extract(day from now() - max(o.invoiced_at)) > fr.avg_days_between_orders * 1.5
+  ) as is_at_risk
 from customers c
 left join orders o on o.customer_id = c.id
 left join quotes q on q.customer_id = c.id
 left join follow_ups f on f.customer_id = c.id
-group by c.id;
+left join frequency fr on fr.customer_id = c.id
+group by c.id, fr.avg_days_between_orders;
 
 -- ============================================================================
 -- 25. ROW LEVEL SECURITY  (doc 05 — seguridad real, no solo ocultar botones)
@@ -912,8 +945,14 @@ create policy invoice_operations_select on invoice_operations for select
 -- follow_ups: cada vendedora ve/gestiona los propios; supervisor/admin ven todos
 create policy follow_ups_select on follow_ups for select
   using (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+-- Mismo cuidado que en orders_insert/quotes_insert: exigir el rol
+-- explícitamente, no solo "seller_id = uno mismo" (doc 05: solo Seller
+-- "hace seguimiento", Warehouse no debería poder crear follow_ups)
 create policy follow_ups_insert on follow_ups for insert
-  with check (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+  with check (
+    current_wow_role() in ('SELLER','SUPERVISOR','ADMIN')
+    and (seller_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'))
+  );
 
 -- shipments: visible según se pueda ver el pedido; solo bodega despacha
 create policy shipments_select on shipments for select

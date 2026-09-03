@@ -1621,8 +1621,11 @@ export type Database = {
       customer_metrics: {
         Row: {
           average_ticket: number | null
+          avg_days_between_orders: number | null
           customer_id: string | null
           days_since_last_order: number | null
+          estimated_next_purchase_at: string | null
+          is_at_risk: boolean | null
           last_order_at: string | null
           lifetime_value: number | null
           open_followups_count: number | null
@@ -1749,6 +1752,30 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      complete_follow_up: {
+        Args: { p_follow_up_id: string; p_result: string }
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          notes: string | null
+          priority: string | null
+          reason: string | null
+          result: string | null
+          scheduled_at: string
+          seller_id: string
+          status: Database["public"]["Enums"]["follow_up_status"]
+          type: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "follow_ups"
           isOneToOne: true
           isSetofReturn: false
         }

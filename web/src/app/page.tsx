@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
+import { DashboardPanel } from "./dashboard-panel";
+import { getSellerDashboard } from "@/lib/actions/dashboard";
 
 const ROLE_LABEL: Record<string, string> = {
   SELLER: "Vendedora",
@@ -30,8 +32,14 @@ export default async function HomePage() {
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
+  // doc 01 §30: para la vendedora, "¿qué tengo que hacer hoy?" es la
+  // primera pantalla. Supervisor/admin/bodega no tienen ese panel todavía
+  // (Fase 11 es donde llegan sus reportes) — siguen con la tarjeta de
+  // navegación simple.
+  const dashboard = profile?.active && profile.role === "SELLER" ? await getSellerDashboard() : null;
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 px-4">
+    <main className={`mx-auto flex min-h-screen flex-col gap-6 px-4 py-10 ${dashboard ? "max-w-3xl" : "max-w-2xl justify-center"}`}>
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-neutral-900">WOW Sales</h1>
         <SignOutButton />
@@ -47,6 +55,36 @@ export default async function HomePage() {
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           Tu usuario está desactivado. Contacta a un administrador.
         </div>
+      ) : dashboard ? (
+        <>
+          <DashboardPanel data={dashboard} />
+          <div className="flex gap-2 border-t border-neutral-200 pt-4">
+            <Link
+              href="/customers"
+              className="inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
+            >
+              Clientes
+            </Link>
+            <Link
+              href="/products"
+              className="inline-block rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
+            >
+              Productos
+            </Link>
+            <Link
+              href="/quotes"
+              className="inline-block rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
+            >
+              Cotizaciones
+            </Link>
+            <Link
+              href="/orders"
+              className="inline-block rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
+            >
+              Pedidos
+            </Link>
+          </div>
+        </>
       ) : (
         <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-neutral-500">Bienvenida/o</p>

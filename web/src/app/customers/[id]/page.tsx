@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { SiigoSyncButton } from "./siigo-sync-button";
 import { GhlSyncStatus } from "./ghl-sync-status";
+import { FollowUpsPanel } from "./followups-panel";
 
 const ACTIVITY_LABEL: Record<string, string> = {
   CALL: "Llamada",
@@ -59,16 +60,30 @@ export default async function CustomerDetailPage({
     notFound();
   }
 
-  const { data: activities } = await supabase
-    .from("customer_activities")
-    .select("id, activity_type, description, activity_at, user:users(name)")
-    .eq("customer_id", id)
-    .order("activity_at", { ascending: false })
-    .limit(50);
+  const [{ data: activities }, { data: metrics }, { data: pendingFollowUps }] = await Promise.all([
+    supabase
+      .from("customer_activities")
+      .select("id, activity_type, description, activity_at, user:users(name)")
+      .eq("customer_id", id)
+      .order("activity_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("customer_metrics")
+      .select("last_order_at, days_since_last_order, avg_days_between_orders, estimated_next_purchase_at, is_at_risk")
+      .eq("customer_id", id)
+      .maybeSingle(),
+    supabase
+      .from("follow_ups")
+      .select("id, scheduled_at, reason, type")
+      .eq("customer_id", id)
+      .eq("status", "PENDING")
+      .order("scheduled_at", { ascending: true }),
+  ]);
 
   const responsible = Array.isArray(customer.responsible)
     ? customer.responsible[0]
     : customer.responsible;
+  const canFollowUp = profile?.role === "SELLER" || profile?.role === "SUPERVISOR" || profile?.role === "ADMIN";
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
@@ -116,6 +131,42 @@ export default async function CustomerDetailPage({
         </dl>
       </div>
 
+      {metrics && metrics.last_order_at && (
+        <div className="mt-4 rounded-lg border border-neutral-200 bg-white p-4 text-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-neutral-500">Seguimiento inteligente</h2>
+            {metrics.is_at_risk && (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                🔴 Fuera de ciclo
+              </span>
+            )}
+          </div>
+          <dl className="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <dt className="text-xs text-neutral-500">Última compra</dt>
+              <dd className="text-neutral-900">{new Date(metrics.last_order_at).toLocaleDateString("es-CO")}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-neutral-500">Frecuencia promedio</dt>
+              <dd className="text-neutral-900">
+                {metrics.avg_days_between_orders ? `~${Math.round(metrics.avg_days_between_orders)} días` : "—"}
+              </dd>
+            </div>
+            {metrics.estimated_next_purchase_at && (
+              <div className="col-span-2">
+                <dt className="text-xs text-neutral-500">Próxima compra estimada</dt>
+                <dd className="text-neutral-900">
+                  {new Date(metrics.estimated_next_purchase_at).toLocaleDateString("es-CO")}
+                </dd>
+              </div>
+            )}
+          </dl>
+          <p className="mt-2 text-xs text-neutral-400">
+            Recomendación basada en datos — no reemplaza el criterio comercial.
+          </p>
+        </div>
+      )}
+
       {profile?.role === "ADMIN" &&
         (customer.siigo_customer_id ? (
           <p className="mt-4 text-xs text-neutral-400">
@@ -128,6 +179,8 @@ export default async function CustomerDetailPage({
       {profile?.role === "ADMIN" && (
         <GhlSyncStatus customerId={customer.id} status={customer.ghl_sync_status} error={customer.ghl_sync_error} />
       )}
+
+      {canFollowUp && <FollowUpsPanel customerId={customer.id} followUps={pendingFollowUps ?? []} />}
 
       <h2 className="mt-8 mb-3 text-sm font-semibold text-neutral-700">Actividad</h2>
       <div className="space-y-3">
