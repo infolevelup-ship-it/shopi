@@ -1564,6 +1564,66 @@ export type Database = {
       }
     }
     Functions: {
+      create_customer: {
+        Args: {
+          p_address?: string
+          p_city?: string
+          p_commercial_name?: string
+          p_customer_type: string
+          p_document_number: string
+          p_document_type: string
+          p_email?: string
+          p_first_name?: string
+          p_last_name?: string
+          p_legal_name?: string
+          p_phone?: string
+        }
+        Returns: {
+          address: string | null
+          channel: string | null
+          check_digit: string | null
+          city: string | null
+          city_code: string | null
+          commercial_name: string | null
+          created_at: string
+          credit_limit: number | null
+          customer_type: string
+          customer_type_classification: string | null
+          department: string | null
+          document_number: string
+          document_number_normalized: string
+          document_type: string
+          email: string | null
+          first_name: string | null
+          fiscal_responsibility: string | null
+          ghl_contact_id: string | null
+          id: string
+          is_duplicate_candidate: boolean
+          last_contact_at: string | null
+          last_name: string | null
+          last_purchase_at: string | null
+          legal_name: string | null
+          merged_into_customer_id: string | null
+          phone: string | null
+          postal_code: string | null
+          purchase_type: string | null
+          responsible_user_id: string | null
+          secondary_phone: string | null
+          siigo_customer_id: string | null
+          source: string | null
+          state_code: string | null
+          status: Database["public"]["Enums"]["customer_status"]
+          updated_at: string
+          vat_responsible: boolean | null
+          website_social: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "customers"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       current_wow_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]

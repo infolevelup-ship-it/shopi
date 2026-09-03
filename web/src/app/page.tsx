@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 
@@ -53,6 +54,12 @@ export default async function HomePage() {
           <p className="mt-1 text-sm text-neutral-500">
             Rol: {ROLE_LABEL[profile.role] ?? profile.role}
           </p>
+          <Link
+            href="/customers"
+            className="mt-4 inline-block rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
+          >
+            Clientes
+          </Link>
         </div>
       )}
     </main>
