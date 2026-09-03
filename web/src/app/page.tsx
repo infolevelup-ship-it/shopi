@@ -33,9 +33,9 @@ export default async function HomePage() {
     .maybeSingle();
 
   // doc 01 §30: para la vendedora, "¿qué tengo que hacer hoy?" es la
-  // primera pantalla. Supervisor/admin/bodega no tienen ese panel todavía
-  // (Fase 11 es donde llegan sus reportes) — siguen con la tarjeta de
-  // navegación simple.
+  // primera pantalla. Supervisor/admin/bodega van directo a /reports
+  // (Fase 11) — no tienen un panel diario propio, ese es específicamente
+  // de la vendedora.
   const dashboard = profile?.active && profile.role === "SELLER" ? await getSellerDashboard() : null;
 
   return (
@@ -83,6 +83,12 @@ export default async function HomePage() {
             >
               Pedidos
             </Link>
+            <Link
+              href="/reports"
+              className="inline-block rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
+            >
+              Reportes
+            </Link>
           </div>
         </>
       ) : (
@@ -125,6 +131,12 @@ export default async function HomePage() {
                 Revisión bodega
               </Link>
             )}
+            <Link
+              href="/reports"
+              className="inline-block rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
+            >
+              Reportes
+            </Link>
           </div>
         </div>
       )}

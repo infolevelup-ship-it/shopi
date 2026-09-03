@@ -433,6 +433,38 @@ Deliberadamente fuera de esta pasada:
       contempla pero no hay infraestructura de jobs en este proyecto (todo es on-demand); "vencido"
       se calcula al leer (`status = PENDING and scheduled_at < now()`), no se guarda.
 
+## Fase 11 (Reportes) — construido y probado, alcance acotado a propósito
+
+Igual que Fase 10, sin dependencias externas — todo probado de verdad contra el proyecto real
+(sesiones simuladas, con rollback). No hizo falta ninguna migración: todos los datos ya existían
+(timestamps de `orders`, `order_status_history`, `invoice_operations`, `customer_metrics`).
+
+- [x] Una sola pantalla `/reports` con selector Hoy/Mes (doc 01 §52-53 son la misma pregunta en dos
+      ventanas de tiempo distintas, no dos pantallas separadas) que muestra secciones según el rol
+      (doc 10 §14: seller/warehouse/supervisor/admin):
+      - **Vendedora**: ventas, pedidos facturados, ticket promedio, clientes nuevos, cotizaciones
+        (creadas/ganadas/perdidas/valor perdido) — todo escaneado a lo suyo (`seller_id`/
+        `responsible_user_id` = ella).
+      - **Bodega**: pendientes de revisión (ahora mismo), devueltos, errores de facturación, tiempo
+        promedio a revisión y a facturar — estos últimos dos salen de los timestamps reales de
+        `orders` (doc 01 §33: "deben salir de timestamps reales, no de cálculos manuales"),
+        verificado con datos exactos (10 min → 0.1667 h, 90 min → 1.5 h).
+      - **Supervisor/admin**: todo lo anterior sin filtrar por vendedora, más ventas por
+        vendedora/cliente/producto (top 10), clientes en riesgo (reusa `customer_metrics` de la
+        Fase 10), y stock más bajo (de los productos que sí tienen `stock_cache`, honesto sobre que
+        los que no están sincronizados con Siigo simplemente no aparecen).
+- [ ] "Diferencias de inventario detectadas" (doc 01 §32) — no se construyó: el sistema no tiene
+      ninguna fuente de conteo físico contra la cual comparar `stock_cache`. No hay ningún dato que
+      mostrar sin inventarlo.
+- [ ] Visor de auditoría (doc 01 §34, `audit_logs`) — la tabla y la RLS (solo supervisor/admin) ya
+      existen desde la Fase 1 y se sigue llenando en cada aprobación/factura, pero no hay pantalla
+      para leerla. Se puede consultar por SQL directo mientras tanto; es candidata a agregarse aquí
+      mismo en `/reports` el día que se necesite de verdad.
+- [ ] Gráficas de tendencia (ventas día a día dentro del mes, por ejemplo) — hoy son totales del
+      período, no series de tiempo. `/reports` está estructurado para agregar esto sin rehacer nada.
+- [ ] Notificaciones (doc 01 §57) — los números del reporte responden "¿cuánto pasó?", no avisan en
+      el momento; ya estaba anotado igual en la Fase 10 y sigue siendo una capa aparte.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in
