@@ -352,6 +352,8 @@ create table orders (
   dispatched_at timestamptz,
   delivered_at timestamptz,
   cancelled_at timestamptz,
+  cancelled_by uuid references users(id),   -- doc 01 §46: nunca borrar, siempre CANCELLED con quién y por qué
+  cancellation_reason text,
   updated_at timestamptz not null default now()
 );
 
@@ -414,8 +416,13 @@ create index order_status_history_order_idx on order_status_history (order_id, c
 create or replace function log_order_status_change() returns trigger as $$
 begin
   if old.status is distinct from new.status then
+    -- current_wow_user_id(), no auth.uid(): changed_by referencia users(id)
+    -- (el id interno de WOW), no auth.users(id) (lo que devuelve auth.uid())
+    -- — son dos espacios de ID distintos. Encontrado en Fase 5 probando con
+    -- una sesión JWT simulada real: con auth.uid() directo esto violaba la
+    -- FK de changed_by en cuanto había una sesión de verdad detrás.
     insert into order_status_history (order_id, from_status, to_status, changed_by, created_at)
-    values (new.id, old.status, new.status, coalesce(auth.uid(), new.seller_id), now());
+    values (new.id, old.status, new.status, coalesce(current_wow_user_id(), new.seller_id), now());
   end if;
   return new;
 end;
@@ -842,6 +849,8 @@ create policy orders_insert on orders for insert
 
 create policy order_items_select on order_items for select
   using (exists (select 1 from orders o where o.id = order_items.order_id));
+create policy order_items_insert on order_items for insert
+  with check (exists (select 1 from orders o where o.id = order_items.order_id));
 
 -- order_status_history: visible según se pueda ver el pedido; nadie inserta
 -- manualmente — solo el trigger log_order_status_change (security definer)

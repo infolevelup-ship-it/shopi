@@ -97,16 +97,68 @@ en vivo: una sesión de bodega simulada SÍ podía crear una cotización antes d
 bloqueada (`insufficient_privilege`) después. Doc 01 §4.1-4.3: solo `SELLER`/`SUPERVISOR`/`ADMIN`
 crean cotizaciones y pedidos.
 
+## Fase 5 (pedidos) — construido parcialmente, fast-follow pendiente
+
+- [ ] Editar pedido existente (hoy solo crear, enviar a revisión o cancelar — no editar líneas
+      después de creado, doc 04 §8 lo permite en DRAFT/SUBMITTED/RETURNED_TO_SELLER).
+- [ ] Comprobante de pago (`attachments`, máximo 3 por pedido, doc 02 §15) — deliberadamente fuera
+      de esta pasada: necesita un bucket de Supabase Storage con sus propias políticas, es un
+      subsistema aparte que merece su propia pasada probada con cuidado, no ir pegado aquí.
+  Todavía no se puede adjuntar comprobante de pago desde la UI.
+- [ ] Recibo/PDF imprimible del pedido (doc 01 §17) — depende de que exista el pedido, fast-follow
+      natural una vez haya bodega (Fase 6) revisándolo con el recibo en mano.
+- [ ] `PENDING_REVIEW`/`IN_REVIEW`/`RETURNED_TO_SELLER` — estos estados los mueve bodega, no la
+      vendedora; `submit_order()` deja el pedido en `SUBMITTED` y ahí termina su parte. Falta la
+      Fase 6 completa (cola de revisión, checklist, aprobar/devolver).
+- [ ] Retención al 10% deliberadamente NO se ofrece en el selector — doc 06 §14 marcó esa tasa como
+      no encontrada en el catálogo real de Siigo; ofrecerla generaría pedidos que fallarían al
+      facturar en la Fase 7. Si se confirma que sí existe, agregarla de vuelta.
+
+## Fase 5 (pedidos) — tres bugs reales encontrados, corregidos y verificados
+
+1. **`order_items` no tenía política de INSERT** — mismo hueco que tuvo `quote_items` en la Fase 4,
+   pero esta vez se encontró revisando el esquema real antes de escribir la función, no por prueba
+   y error. Agregada.
+2. **`orders` no tenía `cancelled_by` ni `cancellation_reason`** — doc 01 §46 los exige junto con
+   `cancelled_at` ("nunca borrar, siempre CANCELADO con quién y por qué"); solo existía la fecha.
+   Agregadas ambas columnas.
+3. **El trigger `log_order_status_change()` (de la Fase 1) usaba `auth.uid()` en vez de
+   `current_wow_user_id()`** para `changed_by` — pero `changed_by` referencia `users(id)` (el id
+   interno de WOW), no `auth.users(id)` (lo que devuelve `auth.uid()`). Son dos espacios de ID
+   distintos. Nunca falló en las pruebas de la Fase 1 porque esas corrieron sin sesión JWT
+   simulada (`auth.uid()` daba `null` ahí, caía a `seller_id` por pura coincidencia). En la Fase 5,
+   con una sesión real simulada, `auth.uid()` devolvía un id de `auth.users` que no existe en
+   `users` → violaba la foreign key en cuanto alguien enviaba o cancelaba un pedido de verdad.
+   **Lección:** cualquier función/trigger escrito y probado sin una sesión JWT simulada real puede
+   esconder este tipo de error — de ahora en adelante, toda prueba de una función que dependa de
+   `auth.uid()`/rol debe simular la sesión completa, no correr como superusuario.
+
+Los tres se verificaron con el flujo completo contra el proyecto real (crear pedido con 4
+unidades, 10% descuento, 2.5% retención → enviar): `400.000 − 40.000 descuento + 68.400 IVA −
+9.000 retención = 419.400`, exacto, con el historial de estado y la actividad del cliente quedando
+registrados correctamente.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in
   place). `web/supabase/migrations/000N_*.sql` es el historial incremental real — para un proyecto
   Supabase nuevo desde cero, se aplican en orden (0001, 0002, 0003, ...) y llegan al mismo estado
   que describe el archivo de docs.
-- Patrón aprendido dos veces: `revoke ... from anon` no basta para bloquear una función — Postgres
-  otorga `EXECUTE` a `PUBLIC` automáticamente al crearla, y `PUBLIC` aplica a todos los roles sin
-  excepción. Hay que revocar de `PUBLIC` directamente. Verificar siempre contra
-  `information_schema.routine_privileges`, no confiar en la respuesta cacheada del advisor.
-- Toda operación de negocio no trivial (crear cliente, y las que vengan: cotizar, aprobar, facturar)
-  va como función de Postgres nombrada (`security invoker`, respeta RLS), nunca como INSERTs sueltos
-  desde el cliente — doc 03 §9, "commands vs updates".
+- Patrón aprendido varias veces ya: `revoke ... from anon` (o `from public`) por separado no basta
+  para bloquear una función — Postgres otorga `EXECUTE` a `PUBLIC` **y por separado** a
+  `anon`/`authenticated`/`service_role` al crearla. Hay que revocar de ambos explícitamente.
+  Verificar siempre contra `information_schema.routine_privileges`, no confiar en la respuesta
+  cacheada del advisor.
+- Toda operación de negocio no trivial (crear cliente, cotizar, crear pedido, y las que vengan:
+  aprobar, facturar) va como función de Postgres nombrada, nunca como INSERTs sueltos desde el
+  cliente — doc 03 §9, "commands vs updates". Las que solo insertan van `security invoker`
+  (respetan RLS de verdad); las que cambian de estado sobre una tabla sin política de UPDATE van
+  `security definer` y revalidan rol + estado ellas mismas.
+- Regla dura que ya mordió dos veces (Fase 4 con `quotes`, sería fácil que vuelva a pasar en Fase
+  6+): si una función necesita "insertar y después corregir con un UPDATE" sobre una tabla con RLS
+  sin política de UPDATE, el UPDATE no da error — silenciosamente no afecta ninguna fila. Rediseñar
+  para calcular todo antes del único INSERT, nunca insertar y corregir después.
+- Toda prueba de una función que use `current_wow_role()`/`current_wow_user_id()`/`auth.uid()`
+  debe simular una sesión JWT real (`set local request.jwt.claims = '{"sub":"..."}'; set local
+  role authenticated;`) — correr como superusuario esconde bugs de estos que solo aparecen con una
+  sesión de verdad detrás (ver el bug de `changed_by` arriba).
