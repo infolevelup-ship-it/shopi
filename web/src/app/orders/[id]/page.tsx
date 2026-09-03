@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { OrderActions } from "./order-actions";
 import { OrderReviewPanel } from "./order-review-panel";
+import { OrderStockSyncButton } from "./order-stock-sync-button";
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
@@ -141,6 +142,8 @@ export default async function OrderDetailPage({
             Forma de pago: {PAYMENT_LABEL[order.payment_method] ?? order.payment_method}
           </p>
         )}
+
+        {isReviewer && <OrderStockSyncButton orderId={order.id} />}
 
         <table className="mt-4 w-full text-sm">
           <thead>

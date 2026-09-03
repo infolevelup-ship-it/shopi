@@ -14,6 +14,19 @@ perderse en el chat. Se resuelve al final de cada fase o cuando se decida explí
 - [ ] Decidir: ¿centro de costo único ("PUBLICO") o separado por canal (salón / estilista
       independiente / tiendas)? Ver `docs/06_INTEGRACION_SIIGO.md` §22 — es una decisión de negocio,
       no técnica, y ya hay 3 centros de costo sin usar en la cuenta real de Siigo.
+- [ ] Pegar `SIIGO_USERNAME` / `SIIGO_ACCESS_KEY` / `SIIGO_PARTNER_ID` reales en `web/.env.local`
+      (y luego en Vercel) — variables ya reservadas en `.env.example` desde la Fase 1, ahora sí en
+      uso (Fase 7, `web/src/lib/siigo/client.ts`). Nunca las pegues en un mensaje que yo vaya a
+      commitear; van solo en el `.env.local`/Vercel.
+- [ ] **Antes de usar `syncCustomerToSiigoAction`/`syncOrderProductStockAction` contra la cuenta
+      real por primera vez**: esta sesión no tuvo salida de red hacia `api.siigo.com` (bloqueada
+      por política de organización — confirmado con `curl`, mismo 403 que en la sesión anterior),
+      así que todo `web/src/lib/siigo/client.ts` se construyó siguiendo doc 06 y la referencia
+      pública de Siigo, pero **sin una sola llamada real**. Antes de confiar en esto en producción,
+      correr un caso de cada uno con datos reales y confirmar: la forma exacta de la respuesta de
+      `/auth`, `/v1/customers` (búsqueda y creación) y `/v1/products/{id}`, y que el mapeo
+      `document_type -> id_type` (NIT 31, CC 13, CE 22, PAS 41, TI 12 — catálogo público DIAN/Siigo,
+      no específico de la cuenta) sea aceptado sin 4xx.
 
 ## Validación contra Siigo — puntos aún sin cerrar (doc 01 §68)
 
@@ -181,6 +194,49 @@ es visible por la política `orders_select` que la vendedora ya usa para ver sus
 Verificado con sesiones simuladas: la vendedora ve `return_reason` en su pedido devuelto, pero
 `select count(*) from order_reviews` para ese mismo pedido le da `0` filas (RLS bloqueando el
 checklist interno, como se esperaba).
+
+## Fase 7 (Siigo) — construido parcialmente a propósito, facturar queda fuera
+
+Alcance de esta pasada, decidido explícitamente con el usuario dado que esta sesión no tiene salida
+de red hacia `api.siigo.com` (política de organización, confirmado con `curl` — mismo bloqueo que
+en la sesión anterior): solo lectura (auth, clientes, productos/stock) + crear cliente, que son de
+bajo riesgo (idempotentes, un 4xx de validación es el peor caso). **Facturar NO se construyó.**
+
+- [ ] `InvoiceService` (doc 01 §18, doc 06 §12-19) — deliberadamente no construido. Es la operación
+      más crítica de todo el sistema: emite un documento fiscal real ante la DIAN que "no se
+      elimina como un pedido normal" (doc 08 §16). Construirla sin poder probarla ni una sola vez
+      contra la cuenta real — con reconciliación de timeouts sin diseñar (doc 06 §18,
+      `SiigoReconciliationService` sigue sin existir) y con la retención al 10% todavía sin
+      confirmar en el catálogo (doc 06 §14) — era exactamente el tipo de acción "difícil de
+      revertir" que vale la pena parar a confirmar antes de tomar, no un lugar para ir rápido.
+      Retomar cuando: (a) haya credenciales reales usables desde algún entorno con salida de red
+      (esta sesión, o Vercel una vez conectado — pendiente arriba), y (b) estén cerrados los puntos
+      de la sección "Validación contra Siigo" de arriba.
+- [ ] `SiigoReconciliationService` (doc 06 §18) — no existe todavía; depende de que exista
+      `InvoiceService` primero.
+- [ ] Sincronización de productos hacia Siigo (`PRODUCT_SYNC`, doc 06 §11) — no se construyó
+      creación/actualización de productos desde WOW hacia Siigo. El doc 10 §10 tampoco la pide
+      ("Después: create customer" — nunca "create product"); WOW solo lee productos que ya existen
+      en el catálogo de Siigo, nunca les da de alta.
+- [ ] `CUSTOMER_SYNC` como job por lotes (doc 06 §11, tabla `sync_jobs`) — lo que se construyó es
+      sincronización de un cliente a la vez, disparada a mano desde la ficha del cliente (botón
+      "Sincronizar con Siigo", solo ADMIN). Un job masivo que recorra todos los clientes sin
+      `siigo_customer_id` es un fast-follow razonable una vez haya credenciales reales para probarlo
+      con volumen.
+- [ ] Mapeo `document_type -> id_type` (`web/src/lib/siigo/client.ts`) usa el catálogo público
+      DIAN/Siigo (NIT 31, CC 13, CE 22, PAS 41, TI 12) — es el mismo para cualquier cuenta de
+      Siigo en Colombia, a diferencia de la retención o el centro de costo (que sí son datos
+      propios de la cuenta y requirieron una consulta real, doc 06 §14/§22). Aun así, nunca se
+      probó contra esta cuenta en particular — confirmar con el primer `syncCustomerToSiigoAction`
+      real.
+- [ ] Conflicto de clientes duplicados en Siigo (doc 06 §4: más de un resultado por identificación)
+      solo se reporta al admin en la UI — no hay pantalla para resolverlo, hay que ir a Siigo
+      directamente. Suficiente para V1 (debería ser un caso raro), fast-follow si aparece seguido.
+- [ ] `syncOrderProductStockAction` actualiza `products.stock_cache` de todos los productos de un
+      pedido con un clic, pero solo si ya tienen `siigo_product_id` — los productos creados a mano
+      en la Fase 3 (todavía la mayoría, sin sincronización real de catálogo) no tienen ese campo y
+      quedan "sin datos". Es exactamente el hueco que ya estaba anotado en la Fase 3
+      ("Sincronización real con Siigo").
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

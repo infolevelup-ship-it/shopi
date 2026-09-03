@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth";
+import { SiigoSyncButton } from "./siigo-sync-button";
 
 const ACTIVITY_LABEL: Record<string, string> = {
   CALL: "Llamada",
@@ -41,13 +43,16 @@ export default async function CustomerDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: customer } = await supabase
-    .from("customers")
-    .select(
-      "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, email, phone, address, city, status, created_at, responsible:users!customers_responsible_user_id_fkey(name)",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: customer }, profile] = await Promise.all([
+    supabase
+      .from("customers")
+      .select(
+        "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, email, phone, address, city, status, created_at, siigo_customer_id, responsible:users!customers_responsible_user_id_fkey(name)",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    getCurrentProfile(),
+  ]);
 
   if (!customer) {
     notFound();
@@ -109,6 +114,15 @@ export default async function CustomerDetailPage({
           )}
         </dl>
       </div>
+
+      {profile?.role === "ADMIN" &&
+        (customer.siigo_customer_id ? (
+          <p className="mt-4 text-xs text-neutral-400">
+            Sincronizado con Siigo (id {customer.siigo_customer_id}).
+          </p>
+        ) : (
+          <SiigoSyncButton customerId={customer.id} />
+        ))}
 
       <h2 className="mt-8 mb-3 text-sm font-semibold text-neutral-700">Actividad</h2>
       <div className="space-y-3">
