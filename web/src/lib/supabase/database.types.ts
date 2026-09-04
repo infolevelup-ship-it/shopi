@@ -455,6 +455,7 @@ export type Database = {
           commercial_name: string | null
           contact_email: string | null
           contact_first_name: string | null
+          contact_indicative: string | null
           contact_last_name: string | null
           contact_phone: string | null
           created_at: string
@@ -467,6 +468,7 @@ export type Database = {
           document_type: string
           email: string | null
           first_name: string | null
+          fiscal_responsibilities: string[] | null
           fiscal_responsibility: string | null
           ghl_contact_id: string | null
           ghl_last_synced_at: string | null
@@ -480,6 +482,7 @@ export type Database = {
           legal_name: string | null
           merged_into_customer_id: string | null
           phone: string | null
+          phone_extension: string | null
           phone_indicative: string | null
           postal_code: string | null
           purchase_type: string | null
@@ -504,6 +507,7 @@ export type Database = {
           commercial_name?: string | null
           contact_email?: string | null
           contact_first_name?: string | null
+          contact_indicative?: string | null
           contact_last_name?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -516,6 +520,7 @@ export type Database = {
           document_type: string
           email?: string | null
           first_name?: string | null
+          fiscal_responsibilities?: string[] | null
           fiscal_responsibility?: string | null
           ghl_contact_id?: string | null
           ghl_last_synced_at?: string | null
@@ -531,6 +536,7 @@ export type Database = {
           legal_name?: string | null
           merged_into_customer_id?: string | null
           phone?: string | null
+          phone_extension?: string | null
           phone_indicative?: string | null
           postal_code?: string | null
           purchase_type?: string | null
@@ -555,6 +561,7 @@ export type Database = {
           commercial_name?: string | null
           contact_email?: string | null
           contact_first_name?: string | null
+          contact_indicative?: string | null
           contact_last_name?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -567,6 +574,7 @@ export type Database = {
           document_type?: string
           email?: string | null
           first_name?: string | null
+          fiscal_responsibilities?: string[] | null
           fiscal_responsibility?: string | null
           ghl_contact_id?: string | null
           ghl_last_synced_at?: string | null
@@ -582,6 +590,7 @@ export type Database = {
           legal_name?: string | null
           merged_into_customer_id?: string | null
           phone?: string | null
+          phone_extension?: string | null
           phone_indicative?: string | null
           postal_code?: string | null
           purchase_type?: string | null
@@ -2170,6 +2179,7 @@ export type Database = {
           p_commercial_name?: string
           p_contact_email?: string
           p_contact_first_name?: string
+          p_contact_indicative?: string
           p_contact_last_name?: string
           p_contact_phone?: string
           p_credit_limit?: number
@@ -2180,10 +2190,11 @@ export type Database = {
           p_document_type: string
           p_email?: string
           p_first_name?: string
-          p_fiscal_responsibility?: string
+          p_fiscal_responsibilities?: string[]
           p_last_name?: string
           p_legal_name?: string
           p_phone?: string
+          p_phone_extension?: string
           p_phone_indicative?: string
           p_postal_code?: string
           p_purchase_type?: string
@@ -2202,6 +2213,7 @@ export type Database = {
           commercial_name: string | null
           contact_email: string | null
           contact_first_name: string | null
+          contact_indicative: string | null
           contact_last_name: string | null
           contact_phone: string | null
           created_at: string
@@ -2214,6 +2226,7 @@ export type Database = {
           document_type: string
           email: string | null
           first_name: string | null
+          fiscal_responsibilities: string[] | null
           fiscal_responsibility: string | null
           ghl_contact_id: string | null
           ghl_last_synced_at: string | null
@@ -2227,6 +2240,7 @@ export type Database = {
           legal_name: string | null
           merged_into_customer_id: string | null
           phone: string | null
+          phone_extension: string | null
           phone_indicative: string | null
           postal_code: string | null
           purchase_type: string | null

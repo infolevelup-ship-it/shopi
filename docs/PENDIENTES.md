@@ -878,6 +878,55 @@ Decidido a propósito:
       va a rechazar — pero si una cambia hay que cambiar la otra.
 - [ ] Editar cotización en borrador sigue pendiente (ya estaba anotado en la Fase 4).
 
+## Paridad visual con Siigo en los formularios de captura
+
+El usuario pidió que crear cliente, pedido y cotización se vean y se recorran **igual que "Crear
+un tercero" de Siigo**, para que las vendedoras no tengan que aprender otra interfaz para capturar
+los mismos datos — sin eliminar ningún campo nuestro que Siigo no tenga.
+
+- [x] Estilo de campo Siigo en `globals.css` (clases `s-*`): campos con solo línea inferior,
+      etiqueta que empieza dentro del campo y sube poniéndose verde al llenarse, subrayado azul al
+      enfocar, asterisco rojo en lo obligatorio, títulos de sección y "Responsabilidad fiscal" en
+      azul. Componentes en `src/components/siigo-fields.tsx`.
+- [x] El formulario de cliente se reorganizó en las **dos tarjetas de Siigo**, en su mismo orden:
+      "Datos básicos" (Tipo, Tipo de identificación, Identificación + Dv, Razón social o
+      Nombres/Apellidos, Ciudad, Dirección, Indicativo + Teléfono + Extensión) y "Datos para
+      facturación y envío" (contacto, Tipo de régimen IVA, teléfono del contacto, y la columna de
+      "Responsabilidad fiscal" con sus casillas).
+- [x] **Ningún campo se eliminó.** Los que Siigo no tiene se quedaron donde corresponden por
+      naturaleza: Departamento (que Siigo resuelve dentro de "Ciudad", pero aquí son dos porque se
+      factura con códigos DANE), Código postal, Nombre comercial, Código de sucursal, Correo de
+      facturación electrónica, Página web y Cumpleaños. Los cuatro que no tienen equivalente
+      posible (Canal, Tipo de negocio, Tipo de compra, Cupo de crédito) quedaron en una tercera
+      tarjeta "Clasificación comercial" debajo, para que la parte de arriba se lea exactamente
+      como Siigo.
+- [x] Pedido y cotización usan el mismo lenguaje visual (tarjetas con título, campos subrayados,
+      buscadores con el mismo trazo), sin cambiar su lógica.
+- [x] Verificado en navegador real a 1500px y a 390px, con el formulario vacío y lleno, contra las
+      capturas de Siigo que compartió el usuario.
+
+Cambios de modelo que exigió la paridad (migración `0021_multi_fiscal_responsibility.sql`):
+
+- **`fiscal_responsibilities text[]`** — en Siigo la responsabilidad fiscal es una lista de
+  casillas y su API la recibe como arreglo: un cliente puede ser O-15 Autorretenedor **y además**
+  R-99-PN. Nuestra columna guardaba un solo valor, así que pintar casillas que solo dejaran elegir
+  una habría sido una interfaz que miente. Se conserva `fiscal_responsibility` (singular) con el
+  primer código porque la sincronización con Siigo y con GHL ya lo leen; el cliente de Siigo ahora
+  envía el arreglo completo. Las filas existentes quedaron migradas.
+- **`phone_extension` y `contact_indicative`** — dos campos que el formulario de Siigo sí tiene y
+  aquí no existían.
+- Si no se marca ninguna casilla se guarda `R-99-PN`, que es el mínimo que exige Siigo ("verifica
+  la responsabilidad en el RUT de tu cliente, mínimo asignar R-99-PN").
+
+Diferencias deliberadas que quedan con Siigo:
+
+- [ ] Siigo tiene **una sola "Ciudad"**; aquí son **Departamento + Ciudad**, ambos del catálogo
+      DANE, porque sin `state_code`/`city_code` Siigo no emite la factura.
+- [ ] El botón principal sigue siendo el negro del resto de la aplicación, no el azul de Siigo:
+      cambiarlo desalinearía todos los demás botones del producto.
+- [ ] La lista de motivos, catálogos y etiquetas vive en código (`src/lib/ui/fiscal.ts`). Cambiar
+      un valor después de cargar clientes reales obliga a migrar los ya guardados.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in

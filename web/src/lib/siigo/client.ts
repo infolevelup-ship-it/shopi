@@ -175,6 +175,8 @@ export type WowCustomerForSiigo = {
   state_code: string | null;
   city_code: string | null;
   fiscal_responsibility: string | null;
+  /** Siigo acepta varias; `fiscal_responsibility` es solo la primera. */
+  fiscal_responsibilities: string[] | null;
   vat_responsible: boolean | null;
 };
 
@@ -203,8 +205,16 @@ export function buildSiigoCustomerPayload(customer: WowCustomerForSiigo): SiigoC
   if (customer.check_digit) payload.check_digit = customer.check_digit;
   if (customer.commercial_name) payload.commercial_name = customer.commercial_name;
   if (customer.vat_responsible !== null) payload.vat_responsible = customer.vat_responsible;
-  if (customer.fiscal_responsibility) {
-    payload.fiscal_responsibilities = [{ code: customer.fiscal_responsibility }];
+  // Se mandan todas las que tenga marcadas; la columna singular queda solo
+  // como respaldo para filas anteriores a la migración 0021.
+  const responsibilities =
+    customer.fiscal_responsibilities?.length
+      ? customer.fiscal_responsibilities
+      : customer.fiscal_responsibility
+        ? [customer.fiscal_responsibility]
+        : [];
+  if (responsibilities.length > 0) {
+    payload.fiscal_responsibilities = responsibilities.map((code) => ({ code }));
   }
   if (customer.address || customer.state_code || customer.city_code) {
     payload.address = {

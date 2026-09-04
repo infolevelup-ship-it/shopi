@@ -15,6 +15,7 @@ import {
   type OrderItemInput,
 } from "@/lib/actions/orders";
 import { PageHeader } from "@/components/ui";
+import { SCard, SNumber, SSelect, STextarea } from "@/components/siigo-fields";
 import { customerDisplayName, formatMoney } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, type PriceList } from "@/lib/ui/fiscal";
@@ -276,9 +277,8 @@ export function OrderForm({
 
       <form onSubmit={handleSubmit} className="grid gap-5">
         {/* --------------------------------------------------- canal B2B/B2C */}
-        <section className="card card-pad">
+        <SCard title="Tipo de venta">
           <fieldset>
-            <legend className="field-label">Tipo de venta</legend>
             <div className="grid grid-cols-2 gap-2">
               {(["B2B", "B2C"] as const).map((c) => (
                 <button
@@ -298,31 +298,22 @@ export function OrderForm({
           </fieldset>
 
           <div className="mt-3">
-            <label htmlFor="price-list" className="field-label">
-              Lista de precio
-            </label>
-            <select
+            <SSelect
               id="price-list"
+              label="Lista de precio"
               value={priceList}
-              onChange={(e) => applyPriceList(e.target.value as PriceList)}
-              className="select"
-            >
-              {PRICE_LISTS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-text-muted">
+              onChange={(v) => applyPriceList(v as PriceList)}
+              options={PRICE_LISTS.map((p) => ({ value: p.value, label: p.label }))}
+            />
+            <p className="s-note mt-1">
               Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Si
               editaste un precio a mano, se pierde ese cambio.
             </p>
           </div>
-        </section>
+        </SCard>
 
         {/* ------------------------------------------------------- cliente */}
-        <section className="card card-pad">
-          <label className="field-label">Cliente</label>
+        <SCard title="Cliente">
           {customer ? (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-soft px-3 py-3">
               <div className="min-w-0">
@@ -348,7 +339,7 @@ export function OrderForm({
                 value={customerQuery}
                 onChange={(e) => runCustomerSearch(e.target.value)}
                 placeholder="Buscar por documento, nombre o teléfono…"
-                className="input"
+                className="s-search"
               />
               {customerResults.length > 0 && (
                 <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-md)]">
@@ -381,17 +372,16 @@ export function OrderForm({
               </p>
             </div>
           )}
-        </section>
+        </SCard>
 
         {/* ------------------------------------------------------ productos */}
-        <section className="card card-pad">
-          <label className="field-label">Agregar producto</label>
+        <SCard title="Productos">
           <div className="relative">
             <input
               value={productQuery}
               onChange={(e) => runProductSearch(e.target.value)}
               placeholder="Buscar por nombre, código o marca…"
-              className="input"
+              className="s-search"
             />
             {productResults.length > 0 && (
               <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-line bg-surface shadow-[var(--shadow-md)]">
@@ -438,46 +428,32 @@ export function OrderForm({
                       </button>
                     </div>
 
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="field-label">Cant.</label>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0.01"
-                          step="0.01"
-                          value={l.quantity}
-                          onChange={(e) => updateLine(l.key, { quantity: Number(e.target.value) })}
-                          className="input"
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Precio</label>
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min="0"
-                          step="1"
-                          value={l.unitPrice}
-                          onChange={(e) => updateLine(l.key, { unitPrice: Number(e.target.value) })}
-                          className="input"
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">% Desc.</label>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={l.discountPercent ?? 0}
-                          onChange={(e) =>
-                            updateLine(l.key, { discountPercent: Number(e.target.value) })
-                          }
-                          className="input"
-                        />
-                      </div>
+                    <div className="mt-1 grid grid-cols-3 gap-4">
+                      <SNumber
+                        id={`qty-${l.key}`}
+                        label="Cant."
+                        min="0.01"
+                        step="0.01"
+                        value={l.quantity}
+                        onChange={(v) => updateLine(l.key, { quantity: v })}
+                      />
+                      <SNumber
+                        id={`price-${l.key}`}
+                        label="Precio"
+                        min="0"
+                        step="1"
+                        value={l.unitPrice}
+                        onChange={(v) => updateLine(l.key, { unitPrice: v })}
+                      />
+                      <SNumber
+                        id={`disc-${l.key}`}
+                        label="% Desc."
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={l.discountPercent ?? 0}
+                        onChange={(v) => updateLine(l.key, { discountPercent: v })}
+                      />
                     </div>
 
                     <div className="mt-2 flex items-center justify-between text-sm">
@@ -495,108 +471,62 @@ export function OrderForm({
               })}
             </ul>
           )}
-        </section>
+        </SCard>
 
         {/* ----------------------------------------------------------- pago */}
-        <section className="card card-pad">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <SCard title="Pago y origen">
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
             <div>
-              <label htmlFor="payment" className="field-label">
-                Forma de pago
-              </label>
-              <select
+              <SSelect
                 id="payment"
+                label="Forma de pago"
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="select"
-              >
-                {availablePaymentMethods.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setPaymentMethod}
+                options={availablePaymentMethods}
+              />
               {channel === "B2C" && (
-                <p className="mt-1 text-xs text-text-muted">
-                  En B2C solo se cobra de contado.
-                </p>
+                <p className="s-note mt-1">En B2C solo se cobra de contado.</p>
               )}
             </div>
 
             {/* El medio de pago solo tiene sentido si ya entró la plata: a
                 crédito todavía no hay nada que registrar. */}
             {isCash && (
-              <div>
-                <label htmlFor="payment-detail" className="field-label">
-                  Medio de pago
-                </label>
-                <select
-                  id="payment-detail"
-                  value={paymentDetail}
-                  onChange={(e) => setPaymentDetail(e.target.value)}
-                  className="select"
-                >
-                  <option value="">Sin especificar</option>
-                  {PAYMENT_DETAILS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <SSelect
+                id="payment-detail"
+                label="Medio de pago"
+                value={paymentDetail}
+                onChange={setPaymentDetail}
+                options={PAYMENT_DETAILS}
+                placeholder="Sin especificar"
+              />
             )}
 
             {channel === "B2B" && (
-              <div>
-                <label htmlFor="retention" className="field-label">
-                  Retención
-                </label>
-                <select
-                  id="retention"
-                  value={retentionPercent}
-                  onChange={(e) => setRetentionPercent(Number(e.target.value))}
-                  className="select"
-                >
-                  {RETENTION_RATES.map((r) => (
-                    <option key={r} value={r}>
-                      {r === 0 ? "Sin retención" : `${r}%`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <SSelect
+                id="retention"
+                label="Retención"
+                value={String(retentionPercent)}
+                onChange={(v) => setRetentionPercent(Number(v))}
+                options={RETENTION_RATES.map((r) => ({
+                  value: String(r),
+                  label: r === 0 ? "Sin retención" : `${r}%`,
+                }))}
+              />
             )}
 
-            <div>
-              <label htmlFor="sale-origin" className="field-label">
-                Origen de la venta
-              </label>
-              <select
-                id="sale-origin"
-                value={saleOrigin}
-                onChange={(e) => setSaleOrigin(e.target.value)}
-                className="select"
-              >
-                <option value="">Sin especificar</option>
-                {SALE_ORIGINS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <SSelect
+              id="sale-origin"
+              label="Origen de la venta"
+              value={saleOrigin}
+              onChange={setSaleOrigin}
+              options={SALE_ORIGINS}
+              placeholder="Sin especificar"
+            />
           </div>
 
-          <div className="mt-4">
-            <label htmlFor="notes" className="field-label">
-              Notas (opcional)
-            </label>
-            <textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              className="textarea"
-            />
+          <div className="mt-2">
+            <STextarea id="notes" label="Notas" rows={2} value={notes} onChange={setNotes} />
           </div>
 
           {lines.length > 0 && (
@@ -612,12 +542,12 @@ export function OrderForm({
                 </div>
               )}
               {/* doc 11 §87: no afirmar un total que todavía no calculó el servidor */}
-              <p className="pt-1 text-xs text-text-muted">
+              <p className="s-note pt-1">
                 El IVA y el total exacto los calcula el servidor al guardar.
               </p>
             </dl>
           )}
-        </section>
+        </SCard>
 
         {error && (
           <div className="rounded-xl border border-danger/30 bg-danger-bg p-3 text-sm text-[#b42318]">

@@ -243,13 +243,17 @@ export type CreateCustomerInput = {
   stateCode?: string;
   cityCode?: string;
   postalCode?: string;
-  fiscalResponsibility?: string;
+  // Siigo lo recibe como arreglo: un cliente puede ser autorretenedor y
+  // además R-99-PN.
+  fiscalResponsibilities?: string[];
   vatResponsible?: boolean;
   // persona de contacto del salón
   phoneIndicative?: string;
+  phoneExtension?: string;
   contactFirstName?: string;
   contactLastName?: string;
   contactEmail?: string;
+  contactIndicative?: string;
   contactPhone?: string;
   // clasificación comercial
   purchaseType?: string;
@@ -287,12 +291,16 @@ export async function createCustomerAction(
     p_state_code: input.stateCode || undefined,
     p_city_code: input.cityCode || undefined,
     p_postal_code: input.postalCode || undefined,
-    p_fiscal_responsibility: input.fiscalResponsibility || undefined,
+    p_fiscal_responsibilities: input.fiscalResponsibilities?.length
+      ? input.fiscalResponsibilities
+      : undefined,
     p_vat_responsible: input.vatResponsible ?? undefined,
     p_phone_indicative: input.phoneIndicative || undefined,
+    p_phone_extension: input.phoneExtension || undefined,
     p_contact_first_name: input.contactFirstName || undefined,
     p_contact_last_name: input.contactLastName || undefined,
     p_contact_email: input.contactEmail || undefined,
+    p_contact_indicative: input.contactIndicative || undefined,
     p_contact_phone: input.contactPhone || undefined,
     p_purchase_type: input.purchaseType || undefined,
     p_customer_type_classification: input.customerTypeClassification || undefined,

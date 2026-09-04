@@ -9,16 +9,19 @@ import {
   type CreateCustomerInput,
   type DuplicateCheckResult,
 } from "@/lib/actions/customers";
-import type { DaneLocation } from "@/lib/actions/dane";
 import { convertProspectAction } from "@/lib/actions/prospects";
+import type { DaneLocation } from "@/lib/actions/dane";
 import {
   CHANNELS,
   CUSTOMER_CLASSIFICATIONS,
   DOCUMENT_TYPES,
   FISCAL_RESPONSIBILITIES,
+  PERSON_TYPES,
   PURCHASE_TYPES,
+  VAT_REGIMES,
   nitCheckDigit,
 } from "@/lib/ui/fiscal";
+import { SCard, SSelect, SText } from "@/components/siigo-fields";
 
 type FormState = {
   customerType: "natural" | "juridica";
@@ -26,30 +29,32 @@ type FormState = {
   documentNumber: string;
   checkDigit: string;
   checkDigitManual: boolean;
-  branchCode: string;
   legalName: string;
   firstName: string;
   lastName: string;
   commercialName: string;
+  branchCode: string;
   department: string;
   cityCode: string;
   address: string;
   postalCode: string;
   phoneIndicative: string;
   phone: string;
-  email: string;
+  phoneExtension: string;
   contactFirstName: string;
   contactLastName: string;
   contactEmail: string;
+  contactIndicative: string;
   contactPhone: string;
+  email: string;
   birthday: string;
-  fiscalResponsibility: string;
-  vatResponsible: boolean;
+  websiteSocial: string;
+  vatResponsible: string;
+  fiscalResponsibilities: string[];
   purchaseType: string;
   customerTypeClassification: string;
   channel: string;
   creditLimit: string;
-  websiteSocial: string;
 };
 
 const initialState: FormState = {
@@ -58,49 +63,34 @@ const initialState: FormState = {
   documentNumber: "",
   checkDigit: "",
   checkDigitManual: false,
-  branchCode: "",
   legalName: "",
   firstName: "",
   lastName: "",
   commercialName: "",
+  branchCode: "",
   department: "",
   cityCode: "",
   address: "",
   postalCode: "",
-  phoneIndicative: "",
+  phoneIndicative: "601",
   phone: "",
-  email: "",
+  phoneExtension: "",
   contactFirstName: "",
   contactLastName: "",
   contactEmail: "",
+  contactIndicative: "",
   contactPhone: "",
+  email: "",
   birthday: "",
-  fiscalResponsibility: "R-99-PN",
-  vatResponsible: false,
+  websiteSocial: "",
+  vatResponsible: "false",
+  // Siigo pide como mínimo R-99-PN y la trae marcada por defecto.
+  fiscalResponsibilities: ["R-99-PN"],
   purchaseType: "contado",
   customerTypeClassification: "",
   channel: "B2B",
   creditLimit: "",
-  websiteSocial: "",
 };
-
-function Fieldset({
-  title,
-  hint,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="card card-pad">
-      <h2 className="text-base font-semibold">{title}</h2>
-      {hint && <p className="mt-0.5 mb-3 text-xs text-text-muted">{hint}</p>}
-      <div className={hint ? "" : "mt-3"}>{children}</div>
-    </section>
-  );
-}
 
 export type ProspectPrefill = {
   id: string;
@@ -132,9 +122,6 @@ export function NewCustomerForm({
       : undefined;
     return {
       ...initialState,
-      // Un salón suele ser persona natural hasta que dice lo contrario, pero
-      // el nombre del prospecto no distingue: se deja el tipo por defecto y
-      // solo se traslada el nombre comercial, que sí aplica a ambos casos.
       commercialName: fromProspect.commercialName ?? fromProspect.name,
       phone: fromProspect.phone ?? "",
       email: fromProspect.email ?? "",
@@ -145,6 +132,7 @@ export function NewCustomerForm({
   const [error, setError] = useState<string | null>(null);
   const [existingCustomerId, setExistingCustomerId] = useState<string | null>(null);
   const [phoneWarning, setPhoneWarning] = useState<DuplicateCheckResult["phoneMatches"]>([]);
+  const [submitted, setSubmitted] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -162,19 +150,33 @@ export function NewCustomerForm({
   const selectedCity = locations.find((l) => l.city_code === form.cityCode) ?? null;
 
   const isNit = form.documentType === "NIT";
-  // Punto 4 de la revisión: el DV se calcula solo, pero se puede corregir a
-  // mano si el NIT del cliente trae uno distinto.
+  const isCompany = form.customerType === "juridica";
+  // Se calcula solo y se puede corregir a mano: hay NIT en circulación con el
+  // DV mal impreso, y Siigo rechaza la factura si no coincide con el suyo.
   const autoCheckDigit = isNit ? nitCheckDigit(form.documentNumber) : null;
   const effectiveCheckDigit = form.checkDigitManual ? form.checkDigit : (autoCheckDigit ?? "");
+
+  // Solo se marcan en rojo después del primer intento de guardar: señalar en
+  // rojo un campo que la vendedora todavía no ha tocado es ruido.
+  const missing = (v: string) => (submitted && !v.trim() ? "*Campo obligatorio" : null);
+
+  function toggleResponsibility(code: string) {
+    setForm((f) => ({
+      ...f,
+      fiscalResponsibilities: f.fiscalResponsibilities.includes(code)
+        ? f.fiscalResponsibilities.filter((c) => c !== code)
+        : [...f.fiscalResponsibilities, code],
+    }));
+  }
 
   function toInput(): CreateCustomerInput {
     return {
       customerType: form.customerType,
       documentType: form.documentType,
       documentNumber: form.documentNumber,
-      legalName: form.customerType === "juridica" ? form.legalName : undefined,
-      firstName: form.customerType === "natural" ? form.firstName : undefined,
-      lastName: form.customerType === "natural" ? form.lastName : undefined,
+      legalName: isCompany ? form.legalName : undefined,
+      firstName: !isCompany ? form.firstName : undefined,
+      lastName: !isCompany ? form.lastName : undefined,
       commercialName: form.commercialName || undefined,
       email: form.email || undefined,
       phone: form.phone || undefined,
@@ -186,12 +188,14 @@ export function NewCustomerForm({
       stateCode: selectedCity?.state_code,
       cityCode: selectedCity?.city_code,
       postalCode: form.postalCode || undefined,
-      fiscalResponsibility: form.fiscalResponsibility || undefined,
-      vatResponsible: form.vatResponsible,
+      fiscalResponsibilities: form.fiscalResponsibilities,
+      vatResponsible: form.vatResponsible === "true",
       phoneIndicative: form.phoneIndicative || undefined,
+      phoneExtension: form.phoneExtension || undefined,
       contactFirstName: form.contactFirstName || undefined,
       contactLastName: form.contactLastName || undefined,
       contactEmail: form.contactEmail || undefined,
+      contactIndicative: form.contactIndicative || undefined,
       contactPhone: form.contactPhone || undefined,
       purchaseType: form.purchaseType || undefined,
       customerTypeClassification: form.customerTypeClassification || undefined,
@@ -211,14 +215,11 @@ export function NewCustomerForm({
     }
 
     if (fromProspect) {
-      // El cliente ya existe pase lo que pase aquí; si el enlace falla se
-      // avisa en vez de perder al cliente recién creado, y el prospecto se
-      // puede cerrar a mano.
+      // El cliente ya existe pase lo que pase aquí; si el enlace falla se avisa
+      // en vez de perder al cliente recién creado.
       const linked = await convertProspectAction(fromProspect.id, result.customerId);
       if (!linked.ok) {
-        setError(
-          `El cliente se creó, pero no se pudo cerrar el prospecto: ${linked.error}`,
-        );
+        setError(`El cliente se creó, pero no se pudo cerrar el prospecto: ${linked.error}`);
         return;
       }
     }
@@ -228,9 +229,13 @@ export function NewCustomerForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitted(true);
     setError(null);
     setExistingCustomerId(null);
     setPhoneWarning([]);
+
+    if (!form.documentNumber.trim()) return;
+    if (isCompany ? !form.legalName.trim() : !form.firstName.trim() || !form.lastName.trim()) return;
 
     startTransition(async () => {
       try {
@@ -241,12 +246,10 @@ export function NewCustomerForm({
           setExistingCustomerId(dup.exactMatch.id);
           return;
         }
-
         if (dup.phoneMatches.length > 0) {
-          setPhoneWarning(dup.phoneMatches);
-          return; // esperar confirmación explícita, doc 01 §7: avisar, no bloquear
+          setPhoneWarning(dup.phoneMatches); // doc 01 §7: avisar, no bloquear
+          return;
         }
-
         await doCreate();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error creando el cliente");
@@ -267,488 +270,307 @@ export function NewCustomerForm({
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-5">
-      {/* ------------------------------------------------- 1. identificación */}
-      <Fieldset
-        title="Identificación"
-        hint="Estos datos van tal cual a la factura electrónica. Si están mal, la DIAN la rechaza."
-      >
-        {/* doc 11 §27: el tipo de cliente es lo primero — decide qué campos siguen */}
-        <fieldset>
-          <legend className="field-label">Tipo de cliente</legend>
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
-            <label className="flex min-h-[44px] items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="customerType"
-                checked={form.customerType === "juridica"}
-                onChange={() => update("customerType", "juridica")}
-                className="h-4 w-4"
-              />
-              Empresa (persona jurídica)
-            </label>
-            <label className="flex min-h-[44px] items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="customerType"
-                checked={form.customerType === "natural"}
-                onChange={() => update("customerType", "natural")}
-                className="h-4 w-4"
-              />
-              Persona natural
-            </label>
-          </div>
-        </fieldset>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor="doc-type" className="field-label">
-              Tipo de identificación
-            </label>
-            <select
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+        {/* ======================================================== izquierda */}
+        <SCard title="Datos básicos" required>
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            <SSelect
+              id="person-type"
+              label="Tipo"
+              value={form.customerType}
+              onChange={(v) => update("customerType", v as "natural" | "juridica")}
+              options={PERSON_TYPES}
+            />
+            <SSelect
               id="doc-type"
+              label="Tipo de identificación"
               value={form.documentType}
-              onChange={(e) => update("documentType", e.target.value)}
-              className="select"
-            >
-              {DOCUMENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              onChange={(v) => update("documentType", v)}
+              options={DOCUMENT_TYPES}
+            />
 
-          <div className={isNit ? "grid grid-cols-[1fr_5rem] gap-2" : ""}>
-            <div>
-              <label htmlFor="doc-number" className="field-label">
-                Número de identificación
-              </label>
-              <input
+            {/* Siigo pone el Dv al lado de la identificación siempre, no solo
+                para NIT; se calcula solo cuando es NIT. */}
+            <div className="grid grid-cols-[1fr_4.5rem] gap-4">
+              <SText
                 id="doc-number"
+                label="Identificación"
                 required
                 inputMode="numeric"
                 value={form.documentNumber}
-                onChange={(e) => update("documentNumber", e.target.value)}
-                className="input"
+                onChange={(v) => update("documentNumber", v)}
+                error={missing(form.documentNumber)}
+              />
+              <SText
+                id="check-digit"
+                label="Dv"
+                inputMode="numeric"
+                maxLength={1}
+                value={effectiveCheckDigit}
+                onChange={(v) => {
+                  update("checkDigit", v.replace(/\D/g, ""));
+                  update("checkDigitManual", true);
+                }}
               />
             </div>
-            {isNit && (
-              <div>
-                <label htmlFor="check-digit" className="field-label">
-                  DV
-                </label>
-                <input
-                  id="check-digit"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={effectiveCheckDigit}
-                  onChange={(e) => {
-                    update("checkDigit", e.target.value.replace(/\D/g, ""));
-                    update("checkDigitManual", true);
-                  }}
-                  className="input text-center"
-                />
-              </div>
-            )}
-          </div>
 
-          {isNit && (
-            <p className="text-xs text-text-muted sm:col-span-2">
-              El dígito de verificación se calcula solo.{" "}
-              {form.checkDigitManual ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    update("checkDigitManual", false);
-                    update("checkDigit", "");
-                  }}
-                  className="underline"
-                >
-                  Volver al calculado ({autoCheckDigit ?? "—"})
-                </button>
-              ) : (
-                "Si el NIT del cliente trae otro, escríbelo encima."
-              )}
-            </p>
-          )}
-
-          {form.customerType === "juridica" ? (
-            <div className="sm:col-span-2">
-              <label htmlFor="legal-name" className="field-label">
-                Razón social
-              </label>
-              <input
+            {isCompany ? (
+              <SText
                 id="legal-name"
+                label="Razón social"
                 required
                 value={form.legalName}
-                onChange={(e) => update("legalName", e.target.value)}
-                className="input"
+                onChange={(v) => update("legalName", v)}
+                error={missing(form.legalName)}
               />
-            </div>
-          ) : (
-            <>
-              <div>
-                <label htmlFor="first-name" className="field-label">
-                  Nombres
-                </label>
-                <input
-                  id="first-name"
-                  required
-                  value={form.firstName}
-                  onChange={(e) => update("firstName", e.target.value)}
-                  className="input"
-                />
-              </div>
-              <div>
-                <label htmlFor="last-name" className="field-label">
-                  Apellidos
-                </label>
-                <input
+            ) : (
+              <SText
+                id="first-name"
+                label="Nombres"
+                required
+                value={form.firstName}
+                onChange={(v) => update("firstName", v)}
+                error={missing(form.firstName)}
+              />
+            )}
+
+            {!isCompany && (
+              <>
+                <SText
                   id="last-name"
+                  label="Apellidos"
                   required
                   value={form.lastName}
-                  onChange={(e) => update("lastName", e.target.value)}
-                  className="input"
+                  onChange={(v) => update("lastName", v)}
+                  error={missing(form.lastName)}
                 />
-              </div>
-            </>
-          )}
+                {/* Deja la fila completa para que lo que sigue no se desalinee. */}
+                <span className="hidden sm:block" />
+              </>
+            )}
 
-          <div>
-            <label htmlFor="commercial-name" className="field-label">
-              Nombre comercial (opcional)
-            </label>
-            <input
-              id="commercial-name"
-              value={form.commercialName}
-              onChange={(e) => update("commercialName", e.target.value)}
-              className="input"
-              placeholder="Como lo conocen: “Salón Luna”"
-            />
-          </div>
-          <div>
-            <label htmlFor="branch-code" className="field-label">
-              Código de sucursal (opcional)
-            </label>
-            <input
-              id="branch-code"
-              value={form.branchCode}
-              onChange={(e) => update("branchCode", e.target.value)}
-              className="input"
-            />
-          </div>
-        </div>
-      </Fieldset>
-
-      {/* ------------------------------------------------------ 2. ubicación */}
-      <Fieldset
-        title="Ubicación"
-        hint="Siigo factura con los códigos DANE del departamento y la ciudad, no con el texto libre."
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor="department" className="field-label">
-              Departamento
-            </label>
-            <select
+            {/* Siigo tiene una sola "Ciudad"; aquí son dos selectores porque
+                Siigo factura con los códigos DANE, no con el texto. */}
+            <SSelect
               id="department"
+              label="Departamento"
               value={form.department}
-              onChange={(e) => {
-                update("department", e.target.value);
-                update("cityCode", ""); // la ciudad anterior ya no pertenece a este departamento
+              onChange={(v) => {
+                update("department", v);
+                update("cityCode", ""); // la ciudad anterior ya no pertenece aquí
               }}
-              className="select"
-            >
-              <option value="">Selecciona…</option>
-              {departments.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="city" className="field-label">
-              Ciudad
-            </label>
-            <select
-              id="city"
-              value={form.cityCode}
-              onChange={(e) => update("cityCode", e.target.value)}
-              disabled={!form.department}
-              className="select"
-            >
-              <option value="">{form.department ? "Selecciona…" : "Elige departamento"}</option>
-              {cities.map((c) => (
-                <option key={c.city_code} value={c.city_code}>
-                  {c.city_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <label htmlFor="address" className="field-label">
-              Dirección
-            </label>
-            <input
-              id="address"
-              value={form.address}
-              onChange={(e) => update("address", e.target.value)}
-              className="input"
-              placeholder="Calle 123 # 45-67, Local 2"
+              options={departments.map((d) => ({ value: d, label: d }))}
+              placeholder="Selecciona…"
             />
-          </div>
-          <div>
-            <label htmlFor="postal-code" className="field-label">
-              Código postal (opcional)
-            </label>
-            <input
+            <SSelect
+              id="city"
+              label="Ciudad"
+              value={form.cityCode}
+              onChange={(v) => update("cityCode", v)}
+              options={cities.map((c) => ({ value: c.city_code, label: c.city_name }))}
+              placeholder={form.department ? "Selecciona…" : "Elige departamento"}
+              disabled={!form.department}
+            />
+
+            <SText
+              id="address"
+              label="Dirección"
+              value={form.address}
+              onChange={(v) => update("address", v)}
+            />
+            <SText
               id="postal-code"
+              label="Código postal"
               inputMode="numeric"
               value={form.postalCode}
-              onChange={(e) => update("postalCode", e.target.value)}
-              className="input"
+              onChange={(v) => update("postalCode", v)}
             />
-          </div>
-          {selectedCity && (
-            <p className="self-end text-xs text-text-muted">
-              Códigos DANE: departamento {selectedCity.state_code} · ciudad {selectedCity.city_code}
-            </p>
-          )}
-        </div>
-      </Fieldset>
 
-      {/* ------------------------------------------------------- 3. contacto */}
-      <Fieldset title="Contacto">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid grid-cols-[5.5rem_1fr] gap-2">
-            <div>
-              <label htmlFor="phone-indicative" className="field-label">
-                Indicativo
-              </label>
-              <input
+            <SText
+              id="commercial-name"
+              label="Nombre comercial"
+              value={form.commercialName}
+              onChange={(v) => update("commercialName", v)}
+            />
+            <SText
+              id="branch-code"
+              label="Código de sucursal"
+              value={form.branchCode}
+              onChange={(v) => update("branchCode", v)}
+            />
+
+            {/* En Siigo van los tres en una fila. A 390px no caben sin que la
+                etiqueta "# de Teléfono" se parta, así que la extensión baja a
+                su propia línea y desde `sm` vuelve a la fila de tres. */}
+            <div className="grid grid-cols-[5rem_1fr] gap-4 sm:col-span-2 sm:grid-cols-[6rem_1fr_1fr]">
+              <SText
                 id="phone-indicative"
+                label="Indicativo"
                 inputMode="numeric"
                 value={form.phoneIndicative}
-                onChange={(e) => update("phoneIndicative", e.target.value)}
-                className="input"
-                placeholder="601"
+                onChange={(v) => update("phoneIndicative", v)}
               />
-            </div>
-            <div>
-              <label htmlFor="phone" className="field-label">
-                Teléfono
-              </label>
-              {/* doc 11 §79: teclado contextual en móvil */}
-              <input
+              <SText
                 id="phone"
+                label="# de Teléfono"
                 type="tel"
                 inputMode="tel"
                 value={form.phone}
-                onChange={(e) => update("phone", e.target.value)}
-                className="input"
+                onChange={(v) => update("phone", v)}
               />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="email" className="field-label">
-              Correo de facturación electrónica
-            </label>
-            <input
-              id="email"
-              type="email"
-              inputMode="email"
-              value={form.email}
-              onChange={(e) => update("email", e.target.value)}
-              className="input"
-            />
-          </div>
-        </div>
-
-        <p className="mt-4 mb-2 text-xs font-medium text-text-soft">
-          Persona de contacto del salón (opcional)
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor="contact-first" className="field-label">
-              Nombres
-            </label>
-            <input
-              id="contact-first"
-              value={form.contactFirstName}
-              onChange={(e) => update("contactFirstName", e.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label htmlFor="contact-last" className="field-label">
-              Apellidos
-            </label>
-            <input
-              id="contact-last"
-              value={form.contactLastName}
-              onChange={(e) => update("contactLastName", e.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label htmlFor="contact-phone" className="field-label">
-              Teléfono
-            </label>
-            <input
-              id="contact-phone"
-              type="tel"
-              inputMode="tel"
-              value={form.contactPhone}
-              onChange={(e) => update("contactPhone", e.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label htmlFor="contact-email" className="field-label">
-              Correo
-            </label>
-            <input
-              id="contact-email"
-              type="email"
-              inputMode="email"
-              value={form.contactEmail}
-              onChange={(e) => update("contactEmail", e.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label htmlFor="birthday" className="field-label">
-              Cumpleaños
-            </label>
-            <input
-              id="birthday"
-              type="date"
-              value={form.birthday}
-              onChange={(e) => update("birthday", e.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label htmlFor="website" className="field-label">
-              Página web o red social
-            </label>
-            <input
-              id="website"
-              value={form.websiteSocial}
-              onChange={(e) => update("websiteSocial", e.target.value)}
-              className="input"
-              placeholder="@salonluna"
-            />
-          </div>
-        </div>
-      </Fieldset>
-
-      {/* --------------------------------------- 4. clasificación fiscal */}
-      <Fieldset
-        title="Clasificación fiscal y comercial"
-        hint="La responsabilidad fiscal la exige Siigo; el resto es para reportes y seguimiento."
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor="fiscal-resp" className="field-label">
-              Responsabilidad fiscal
-            </label>
-            <select
-              id="fiscal-resp"
-              value={form.fiscalResponsibility}
-              onChange={(e) => update("fiscalResponsibility", e.target.value)}
-              className="select"
-            >
-              {FISCAL_RESPONSIBILITIES.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className="flex min-h-[44px] items-center gap-2 self-end text-sm">
-            <input
-              type="checkbox"
-              checked={form.vatResponsible}
-              onChange={(e) => update("vatResponsible", e.target.checked)}
-              className="h-4 w-4"
-            />
-            Responsable de IVA
-          </label>
-
-          <div>
-            <label htmlFor="channel" className="field-label">
-              Canal
-            </label>
-            <select
-              id="channel"
-              value={form.channel}
-              onChange={(e) => update("channel", e.target.value)}
-              className="select"
-            >
-              {CHANNELS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="classification" className="field-label">
-              Tipo de negocio
-            </label>
-            <select
-              id="classification"
-              value={form.customerTypeClassification}
-              onChange={(e) => update("customerTypeClassification", e.target.value)}
-              className="select"
-            >
-              <option value="">Sin clasificar</option>
-              {CUSTOMER_CLASSIFICATIONS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="purchase-type" className="field-label">
-              Tipo de compra habitual
-            </label>
-            <select
-              id="purchase-type"
-              value={form.purchaseType}
-              onChange={(e) => update("purchaseType", e.target.value)}
-              className="select"
-            >
-              {PURCHASE_TYPES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {form.purchaseType === "credito" && (
-            <div>
-              <label htmlFor="credit-limit" className="field-label">
-                Cupo de crédito
-              </label>
-              <input
-                id="credit-limit"
-                type="number"
+              <SText
+                id="phone-extension"
+                label="Extensión"
                 inputMode="numeric"
-                min="0"
-                step="1000"
-                value={form.creditLimit}
-                onChange={(e) => update("creditLimit", e.target.value)}
-                className="input"
+                value={form.phoneExtension}
+                onChange={(v) => update("phoneExtension", v)}
+                className="col-span-2 sm:col-span-1"
               />
             </div>
+          </div>
+
+          {selectedCity && (
+            <p className="s-note mt-4 border-t border-line pt-3">
+              Códigos DANE que se enviarán a Siigo: departamento {selectedCity.state_code} · ciudad{" "}
+              {selectedCity.city_code}
+            </p>
+          )}
+        </SCard>
+
+        {/* ========================================================== derecha */}
+        <SCard title="Datos para facturación y envío">
+          <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
+            <div className="grid gap-y-1">
+              <SText
+                id="contact-first"
+                label="Nombres del contacto"
+                value={form.contactFirstName}
+                onChange={(v) => update("contactFirstName", v)}
+              />
+              <SText
+                id="contact-last"
+                label="Apellidos del contacto"
+                value={form.contactLastName}
+                onChange={(v) => update("contactLastName", v)}
+              />
+              <SText
+                id="contact-email"
+                label="Correo electrónico cuando aplique"
+                type="email"
+                inputMode="email"
+                value={form.contactEmail}
+                onChange={(v) => update("contactEmail", v)}
+              />
+              <SSelect
+                id="vat-regime"
+                label="Tipo de régimen IVA"
+                value={form.vatResponsible}
+                onChange={(v) => update("vatResponsible", v)}
+                options={VAT_REGIMES}
+              />
+              <div className="grid grid-cols-[6rem_1fr] gap-4">
+                <SText
+                  id="contact-indicative"
+                  label="Indicativo"
+                  inputMode="numeric"
+                  value={form.contactIndicative}
+                  onChange={(v) => update("contactIndicative", v)}
+                />
+                <SText
+                  id="contact-phone"
+                  label="# de Teléfono"
+                  type="tel"
+                  inputMode="tel"
+                  value={form.contactPhone}
+                  onChange={(v) => update("contactPhone", v)}
+                />
+              </div>
+
+              {/* Nuestros, no están en Siigo pero se capturan aquí porque son
+                  de la misma naturaleza: a dónde llega la factura y cómo
+                  contactar al salón. */}
+              <SText
+                id="email"
+                label="Correo de facturación electrónica"
+                type="email"
+                inputMode="email"
+                value={form.email}
+                onChange={(v) => update("email", v)}
+              />
+              <SText
+                id="website"
+                label="Página web o red social"
+                value={form.websiteSocial}
+                onChange={(v) => update("websiteSocial", v)}
+              />
+              <SText
+                id="birthday"
+                label="Cumpleaños"
+                type="date"
+                value={form.birthday}
+                onChange={(v) => update("birthday", v)}
+              />
+            </div>
+
+            <fieldset className="sm:w-64 sm:border-l sm:border-line sm:pl-6">
+              <legend className="s-legend">Responsabilidad fiscal</legend>
+              <p className="s-note mb-3">
+                Verifica la responsabilidad en el RUT de tu cliente, mínimo asignar R-99-PN
+              </p>
+              {FISCAL_RESPONSIBILITIES.map((f) => (
+                <label key={f.value} className="s-check">
+                  <input
+                    type="checkbox"
+                    checked={form.fiscalResponsibilities.includes(f.value)}
+                    onChange={() => toggleResponsibility(f.value)}
+                  />
+                  <span>
+                    <span className="font-medium">{f.value}</span>{" "}
+                    <span className="text-text-soft">{f.label}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          </div>
+        </SCard>
+      </div>
+
+      {/* ================================================ nuestro, no en Siigo */}
+      <SCard title="Clasificación comercial">
+        <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-4">
+          <SSelect
+            id="channel"
+            label="Canal"
+            value={form.channel}
+            onChange={(v) => update("channel", v)}
+            options={CHANNELS}
+          />
+          <SSelect
+            id="classification"
+            label="Tipo de negocio"
+            value={form.customerTypeClassification}
+            onChange={(v) => update("customerTypeClassification", v)}
+            options={CUSTOMER_CLASSIFICATIONS}
+            placeholder="Sin clasificar"
+          />
+          <SSelect
+            id="purchase-type"
+            label="Tipo de compra habitual"
+            value={form.purchaseType}
+            onChange={(v) => update("purchaseType", v)}
+            options={PURCHASE_TYPES}
+          />
+          {form.purchaseType === "credito" && (
+            <SText
+              id="credit-limit"
+              label="Cupo de crédito"
+              inputMode="numeric"
+              value={form.creditLimit}
+              onChange={(v) => update("creditLimit", v.replace(/\D/g, ""))}
+            />
           )}
         </div>
-      </Fieldset>
+      </SCard>
 
       {error && (
         <div className="rounded-xl border border-danger/30 bg-danger-bg p-3 text-sm text-[#b42318]">
@@ -764,8 +586,8 @@ export function NewCustomerForm({
         </div>
       )}
 
-      {/* doc 11 §29: posible duplicado — se muestra a quién se parece y se
-          deja decidir, nunca se bloquea en silencio */}
+      {/* doc 11 §29: posible duplicado — se muestra a quién se parece y se deja
+          decidir, nunca se bloquea en silencio */}
       {phoneWarning.length > 0 && (
         <div className="rounded-xl border border-warning/30 bg-warning-bg p-4 text-sm text-[#b54708]">
           <p className="font-semibold">⚠ Posible cliente existente</p>
@@ -791,9 +613,15 @@ export function NewCustomerForm({
         </div>
       )}
 
-      <button type="submit" disabled={isPending} className="btn btn-primary btn-block-mobile">
-        {isPending ? "Verificando…" : fromProspect ? "Crear cliente y cerrar prospecto" : "Crear cliente"}
-      </button>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button type="submit" disabled={isPending} className="btn btn-primary btn-block-mobile">
+          {isPending
+            ? "Verificando…"
+            : fromProspect
+              ? "Crear cliente y cerrar prospecto"
+              : "Crear cliente"}
+        </button>
+      </div>
     </form>
   );
 }

@@ -36,7 +36,7 @@ export async function syncCustomerToSiigoAction(customerId: string): Promise<Cus
   const { data: customer } = await supabase
     .from("customers")
     .select(
-      "id, customer_type, document_type, document_number, document_number_normalized, check_digit, legal_name, first_name, last_name, commercial_name, phone, address, state_code, city_code, fiscal_responsibility, vat_responsible, siigo_customer_id",
+      "id, customer_type, document_type, document_number, document_number_normalized, check_digit, legal_name, first_name, last_name, commercial_name, phone, address, state_code, city_code, fiscal_responsibility, fiscal_responsibilities, vat_responsible, siigo_customer_id",
     )
     .eq("id", customerId)
     .maybeSingle();

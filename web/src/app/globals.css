@@ -483,3 +483,205 @@ svg {
     display: table-header-group;
   }
 }
+
+/* ------------------------------------------------- formularios estilo Siigo */
+/* Las vendedoras vienen de "Crear un tercero" de Siigo. Replicar ahí el mismo
+   orden y el mismo aspecto (campos con solo línea inferior, etiqueta que sube
+   y se pone verde al llenarse, título de sección en azul, asterisco rojo en lo
+   obligatorio) les quita el costo de aprender otra interfaz para capturar los
+   mismos datos. Se usa en los formularios de captura fiscal, no en el resto de
+   la aplicación. */
+
+:root {
+  --s-accent: #00a3e0;
+  --s-label: #98a2b3;
+  --s-label-filled: #61b64b;
+  --s-required: #e5484d;
+  --s-line: #d0d5dd;
+}
+
+.s-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  padding: 24px 22px;
+  box-shadow: 0 1px 3px rgb(16 24 40 / 0.06);
+}
+
+.s-card-title {
+  font-size: 19px;
+  font-weight: 600;
+  color: #344054;
+  margin-bottom: 18px;
+}
+
+.s-legend {
+  color: var(--s-accent);
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.s-required {
+  color: var(--s-required);
+  margin-right: 2px;
+}
+
+/* Etiqueta flotante: arranca dentro del campo como marcador de posición y sube
+   al llenarse. Por eso la etiqueta va DESPUÉS del control en el HTML — el
+   selector de hermano la necesita así; `for`/`id` mantienen la accesibilidad. */
+.s-field {
+  position: relative;
+  padding-top: 16px;
+}
+
+.s-field > input,
+.s-field > select,
+.s-field > textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid var(--s-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 15px;
+  outline: none;
+  appearance: none;
+}
+
+.s-field > select {
+  /* la flecha del select, dibujada para no depender del control nativo */
+  background-image: linear-gradient(45deg, transparent 50%, #667085 50%),
+    linear-gradient(135deg, #667085 50%, transparent 50%);
+  background-position:
+    right 8px center,
+    right 3px center;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 20px;
+}
+
+.s-field > label {
+  position: absolute;
+  left: 0;
+  top: 22px;
+  font-size: 15px;
+  color: var(--s-label);
+  pointer-events: none;
+  transition:
+    top 0.15s ease,
+    font-size 0.15s ease,
+    color 0.15s ease;
+}
+
+/* Sube cuando el campo tiene contenido o el foco. `:placeholder-shown` exige
+   que el input traiga placeholder=" ". */
+.s-field > input:focus ~ label,
+.s-field > input:not(:placeholder-shown) ~ label,
+.s-field > textarea:focus ~ label,
+.s-field > textarea:not(:placeholder-shown) ~ label,
+.s-field--filled > label {
+  top: 0;
+  font-size: 12px;
+  color: var(--s-label-filled);
+}
+
+/* Un select siempre muestra algo, así que su etiqueta va arriba de entrada.
+   Lo mismo un input de fecha, que dibuja su formato aunque esté vacío. */
+.s-field > select ~ label,
+.s-field--floated > label {
+  top: 0;
+  font-size: 12px;
+  color: var(--s-label-filled);
+}
+
+/* …pero "arriba" no significa "lleno": un select sin elegir o una fecha en
+   blanco no deben pintarse de verde, o la vendedora cree que ya los llenó.
+   El tercer selector es necesario porque un input[type=date] nunca cumple
+   `:placeholder-shown`, así que la regla de "campo lleno" lo alcanzaba con más
+   especificidad que esta. */
+.s-field--empty > label,
+.s-field--empty > select ~ label,
+.s-field--empty > input:not(:placeholder-shown) ~ label {
+  color: var(--s-label);
+}
+
+.s-field > input:focus,
+.s-field > select:focus,
+.s-field > textarea:focus {
+  border-bottom-color: var(--s-accent);
+  box-shadow: 0 1px 0 0 var(--s-accent);
+}
+
+/* Obligatorio y vacío: la etiqueta no se pinta de verde y el asterisco manda. */
+.s-field--required > label {
+  color: var(--color-text);
+}
+.s-field--required > input:not(:placeholder-shown) ~ label,
+.s-field--required > input:focus ~ label {
+  color: var(--s-label-filled);
+}
+
+.s-field--error > input,
+.s-field--error > select {
+  border-bottom-color: var(--s-required);
+  box-shadow: 0 1px 0 0 var(--s-required);
+}
+
+.s-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--s-required);
+}
+
+.s-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.s-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--s-label-filled);
+  flex-shrink: 0;
+}
+
+.s-note {
+  font-size: 13px;
+  color: var(--color-text-soft);
+  line-height: 1.5;
+}
+
+/* Buscador dentro de un formulario Siigo: mismo trazo que los demás campos,
+   pero conserva su marcador de posición en vez de etiqueta flotante — decir
+   "Buscar por documento, nombre o teléfono" es más útil que la palabra
+   "Cliente" flotando encima. */
+.s-search {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid var(--s-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 15px;
+  outline: none;
+}
+
+.s-search::placeholder {
+  color: var(--s-label);
+}
+
+.s-search:focus {
+  border-bottom-color: var(--s-accent);
+  box-shadow: 0 1px 0 0 var(--s-accent);
+}

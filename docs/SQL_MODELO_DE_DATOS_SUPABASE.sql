@@ -143,7 +143,8 @@ create table customers (
   state_code text,
   city_code text,
   postal_code text,
-  fiscal_responsibility text,
+  fiscal_responsibility text,                      -- primer código, por compatibilidad
+  fiscal_responsibilities text[],                  -- Siigo los recibe como arreglo (migración 0021)
   vat_responsible boolean,
   purchase_type text,
   customer_type_classification text,               -- p.ej. salón / distribuidor / público
@@ -154,9 +155,11 @@ create table customers (
 
   branch_code text,                                -- código de sucursal de la vendedora
   phone_indicative text,                           -- indicativo (601, 604, …)
+  phone_extension text,                            -- extensión (migración 0021)
   contact_first_name text,                         -- persona de contacto del salón
   contact_last_name text,
   contact_email text,                              -- el correo DIAN es customers.email
+  contact_indicative text,                         -- indicativo del contacto (migración 0021)
   contact_phone text,
 
   siigo_customer_id text,

@@ -57,7 +57,7 @@ export default async function CustomerDetailPage({
     supabase
       .from("customers")
       .select(
-        "id, customer_type, document_type, document_number, check_digit, legal_name, first_name, last_name, commercial_name, email, phone, phone_indicative, address, city, department, state_code, city_code, postal_code, status, created_at, fiscal_responsibility, vat_responsible, purchase_type, customer_type_classification, channel, credit_limit, website_social, birthday, branch_code, contact_first_name, contact_last_name, contact_email, contact_phone, siigo_customer_id, responsible_user_id, ghl_sync_status, ghl_sync_error, responsible:users!customers_responsible_user_id_fkey(name)",
+        "id, customer_type, document_type, document_number, check_digit, legal_name, first_name, last_name, commercial_name, email, phone, phone_indicative, address, city, department, state_code, city_code, postal_code, status, created_at, fiscal_responsibility, fiscal_responsibilities, vat_responsible, purchase_type, customer_type_classification, channel, credit_limit, website_social, birthday, branch_code, contact_first_name, contact_last_name, contact_email, contact_phone, siigo_customer_id, responsible_user_id, ghl_sync_status, ghl_sync_error, responsible:users!customers_responsible_user_id_fkey(name)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -240,11 +240,28 @@ export default async function CustomerDetailPage({
             />
             <Row
               label="Responsabilidad fiscal"
-              value={labelOf(FISCAL_RESPONSIBILITIES, customer.fiscal_responsibility) ?? "—"}
+              value={
+                // Puede tener varias (Siigo las recibe como arreglo). Se cae a
+                // la columna singular para filas anteriores a la migración 0021.
+                (customer.fiscal_responsibilities?.length
+                  ? customer.fiscal_responsibilities
+                  : customer.fiscal_responsibility
+                    ? [customer.fiscal_responsibility]
+                    : []
+                )
+                  .map((c) => `${c} ${labelOf(FISCAL_RESPONSIBILITIES, c) ?? ""}`.trim())
+                  .join(" · ") || "—"
+              }
             />
             <Row
-              label="Responsable de IVA"
-              value={customer.vat_responsible == null ? "—" : customer.vat_responsible ? "Sí" : "No"}
+              label="Tipo de régimen IVA"
+              value={
+                customer.vat_responsible == null
+                  ? "—"
+                  : customer.vat_responsible
+                    ? "Responsable de IVA"
+                    : "No responsable de IVA"
+              }
             />
             <Row label="Cliente desde" value={formatDate(customer.created_at)} />
           </dl>

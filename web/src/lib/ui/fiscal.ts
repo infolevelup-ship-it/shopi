@@ -15,13 +15,28 @@ export const DOCUMENT_TYPES: Option[] = [
   { value: "TI", label: "Tarjeta de identidad" },
 ];
 
-// Códigos DIAN tal como los espera Siigo en `fiscal_responsibilities`.
+// Códigos DIAN tal como los espera Siigo en `fiscal_responsibilities`, en el
+// mismo orden en que Siigo los lista para que la vendedora los encuentre en el
+// sitio donde ya está acostumbrada a verlos. Es selección múltiple: un cliente
+// puede ser autorretenedor y además R-99-PN.
 export const FISCAL_RESPONSIBILITIES: Option[] = [
-  { value: "R-99-PN", label: "R-99-PN · No responsable de IVA" },
-  { value: "O-13", label: "O-13 · Gran contribuyente" },
-  { value: "O-15", label: "O-15 · Autorretenedor" },
-  { value: "O-23", label: "O-23 · Agente de retención de IVA" },
-  { value: "O-47", label: "O-47 · Régimen simple de tributación" },
+  { value: "O-13", label: "Gran contribuyente" },
+  { value: "O-15", label: "Autorretenedor" },
+  { value: "O-23", label: "Agente de retención IVA" },
+  { value: "O-47", label: "Régimen simple de tributación" },
+  { value: "R-99-PN", label: "No aplica - Otros" },
+];
+
+// El "Tipo de régimen IVA" de Siigo es nuestro booleano `vat_responsible`.
+export const VAT_REGIMES: Option[] = [
+  { value: "false", label: "No responsable de IVA" },
+  { value: "true", label: "Responsable de IVA" },
+];
+
+// Siigo llama "Tipo" a persona natural vs empresa.
+export const PERSON_TYPES: Option[] = [
+  { value: "natural", label: "Persona" },
+  { value: "juridica", label: "Empresa" },
 ];
 
 export const PURCHASE_TYPES: Option[] = [
