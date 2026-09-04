@@ -572,6 +572,13 @@ svg {
   font-size: 15px;
   color: var(--s-label);
   pointer-events: none;
+  /* La etiqueta está posicionada en absoluto, así que si se parte en dos
+     líneas se monta sobre el campo siguiente. Se mantiene en una sola línea y,
+     en el peor caso, se recorta — nunca invade el campo de abajo. */
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition:
     top 0.15s ease,
     font-size 0.15s ease,

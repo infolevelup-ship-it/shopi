@@ -269,11 +269,15 @@ export function NewCustomerForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-5">
-      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+    // Las medidas van por consulta de contenedor y no por ancho de pantalla:
+    // la barra lateral se lleva 240px, así que a 1024px de pantalla cada
+    // tarjeta queda en ~356px y las etiquetas se partían encima del campo
+    // siguiente. Midiendo la tarjeta, el reparto se decide con el ancho real.
+    <form onSubmit={handleSubmit} className="@container grid gap-5">
+      <div className="grid gap-5 @3xl:grid-cols-2 @3xl:items-start">
         {/* ======================================================== izquierda */}
-        <SCard title="Datos básicos" required>
-          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+        <SCard title="Datos básicos" required className="@container">
+          <div className="grid gap-x-6 gap-y-1 @md:grid-cols-2">
             <SSelect
               id="person-type"
               label="Tipo"
@@ -345,7 +349,7 @@ export function NewCustomerForm({
                   error={missing(form.lastName)}
                 />
                 {/* Deja la fila completa para que lo que sigue no se desalinee. */}
-                <span className="hidden sm:block" />
+                <span className="hidden @md:block" />
               </>
             )}
 
@@ -402,7 +406,7 @@ export function NewCustomerForm({
             {/* En Siigo van los tres en una fila. A 390px no caben sin que la
                 etiqueta "# de Teléfono" se parta, así que la extensión baja a
                 su propia línea y desde `sm` vuelve a la fila de tres. */}
-            <div className="grid grid-cols-[5rem_1fr] gap-4 sm:col-span-2 sm:grid-cols-[6rem_1fr_1fr]">
+            <div className="grid grid-cols-[5rem_1fr] gap-4 @md:col-span-2 @lg:grid-cols-[6rem_1fr_1fr]">
               <SText
                 id="phone-indicative"
                 label="Indicativo"
@@ -424,7 +428,7 @@ export function NewCustomerForm({
                 inputMode="numeric"
                 value={form.phoneExtension}
                 onChange={(v) => update("phoneExtension", v)}
-                className="col-span-2 sm:col-span-1"
+                className="col-span-2 @lg:col-span-1"
               />
             </div>
           </div>
@@ -438,8 +442,8 @@ export function NewCustomerForm({
         </SCard>
 
         {/* ========================================================== derecha */}
-        <SCard title="Datos para facturación y envío">
-          <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
+        <SCard title="Datos para facturación y envío" className="@container">
+          <div className="grid gap-6 @lg:grid-cols-[minmax(0,1fr)_13rem]">
             <div className="grid gap-y-1">
               <SText
                 id="contact-first"
@@ -512,7 +516,7 @@ export function NewCustomerForm({
               />
             </div>
 
-            <fieldset className="sm:w-64 sm:border-l sm:border-line sm:pl-6">
+            <fieldset className="@lg:border-l @lg:border-line @lg:pl-5">
               <legend className="s-legend">Responsabilidad fiscal</legend>
               <p className="s-note mb-3">
                 Verifica la responsabilidad en el RUT de tu cliente, mínimo asignar R-99-PN
@@ -536,8 +540,8 @@ export function NewCustomerForm({
       </div>
 
       {/* ================================================ nuestro, no en Siigo */}
-      <SCard title="Clasificación comercial">
-        <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-4">
+      <SCard title="Clasificación comercial" className="@container">
+        <div className="grid gap-x-6 gap-y-1 @md:grid-cols-2 @3xl:grid-cols-4">
           <SSelect
             id="channel"
             label="Canal"
