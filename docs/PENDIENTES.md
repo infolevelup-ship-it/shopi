@@ -682,8 +682,7 @@ Decidido a propósito, no es un olvido:
 Sigue pendiente del plan acordado (fases D a G, en ese orden):
 
 - [x] **D** — comprobantes de pago. Ver la sección propia más abajo.
-- [ ] **E** — impresión/PDF: rutas `/orders/[id]/imprimir` y `/quotes/[id]/imprimir`, con el botón
-      claramente separado de "Facturar".
+- [x] **E** — impresión/PDF. Ver la sección propia más abajo.
 - [ ] **F** — visitas a prospectos sobre la tabla `prospects` que ya existe.
 - [ ] **G** — editar el pedido mientras está en `DRAFT` o `RETURNED_TO_SELLER`.
 
@@ -733,6 +732,52 @@ No verificado desde aquí (la red del entorno no alcanza Supabase):
       del bucket. Si ese retiro también falla (o se cierra el navegador en medio), queda un
       archivo invisible ocupando espacio. Sin barrido automático por ahora; conviene revisar el
       bucket de vez en cuando cuando haya volumen real.
+
+## Fase E (impresión y PDF) — construido y verificado visualmente
+
+doc 01 §17 conserva el proceso físico (imprimir → verificar → aprobar → facturar) y doc 11 §41
+exige que imprimir esté visualmente lejos de "Facturar en Siigo", porque imprimir no tiene efecto
+fiscal.
+
+- [x] `/orders/[id]/imprimir` — recibo del pedido con encabezado de empresa, cliente, condiciones
+      comerciales, tabla de productos, totales, notas y dos líneas de firma ("Revisado por" /
+      "Recibido por") para la verificación física en bodega.
+- [x] `/quotes/[id]/imprimir` — cotización para el cliente, con "válida hasta" destacado arriba,
+      que es lo primero que se pregunta al recibir una.
+- [x] Ambas viven en un grupo de rutas `(print)` **fuera del AppShell**: una hoja con barra
+      lateral y navegación inferior impresa encima no sirve. El control de acceso es el mismo que
+      el del resto de la aplicación — que sea imprimible no la hace pública.
+- [x] Cada hoja dice explícitamente que **no es una factura y no tiene efecto fiscal**. Sin eso,
+      un recibo impreso se puede confundir con la factura, que es justo lo que doc 11 §41 quiere
+      evitar.
+- [x] Los botones "Imprimir" están en el encabezado de la pantalla, y "Facturar en Siigo" sigue
+      al final de la página: quedan en extremos opuestos.
+- [x] Estilos `@media print` en `globals.css`: A4 con márgenes, oculta todo lo que no es el
+      documento, y evita que una fila de producto o el bloque de totales se parta entre dos
+      páginas.
+- [x] Verificado de verdad con un navegador: se renderizó la hoja con `emulateMedia('print')`,
+      se comprobó que **cero** elementos `.print-hide` quedan visibles al imprimir, y se generó
+      el PDF A4 resultante. Ambas vistas (pantalla y papel) se revisaron en imagen.
+
+Bug real encontrado y corregido de paso:
+
+- La fecha del recibo salía **sin año** (`formatDateTime` lo omite a propósito, porque en una
+  lista de actividad reciente sería ruido). En papel eso significa que un recibo del año pasado se
+  ve idéntico a uno de hoy. Se agregó `formatDateTimeLong()` para documentos que se archivan.
+
+Decidido a propósito:
+
+- [ ] El **PDF sale del propio diálogo de impresión** ("Guardar como PDF"), que existe en todos
+      los navegadores de escritorio y móviles; la pantalla lo dice explícitamente porque no es
+      obvio. No se generó PDF en el servidor: eso exigiría un renderizador headless en Vercel,
+      mucho peso y otra dependencia, para un documento interno que de todos modos se imprime.
+- [ ] Los datos de la empresa (NIT, dirección, teléfono) se leen de `app_settings.company_profile`,
+      **que todavía no está configurada**. Mientras tanto la hoja imprime solo "Productos WOW", que
+      es honesto: mejor una hoja sin NIT que una con un NIT inventado. Configurar esa clave es
+      parte de los pendientes de `app_settings` que ya estaban anotados arriba.
+- [ ] No se pudo renderizar contra datos reales: la política de red del entorno bloquea
+      `*.supabase.co`. La verificación visual se hizo con un banco de pruebas de datos fijos que
+      usaba el mismo marcado y los mismos estilos, y luego se eliminó.
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

@@ -163,7 +163,20 @@ export default async function OrderDetailPage({
             {seller?.name ? ` · Vendedora: ${seller.name}` : ""}
           </>
         }
-        actions={<StatusBadge kind="order" status={order.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge kind="order" status={order.status} />
+            {/* doc 11 §41: imprimir es una acción aparte y sin efecto fiscal,
+                por eso vive aquí arriba y no junto a "Facturar en Siigo", que
+                está al final de la página. */}
+            <Link
+              href={`/orders/${order.id}/imprimir`}
+              className="btn btn-secondary btn-sm"
+            >
+              Imprimir
+            </Link>
+          </div>
+        }
       />
 
       {/* doc 11 §95: cada estado dice qué significa y de quién es la pelota */}

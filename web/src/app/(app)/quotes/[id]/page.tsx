@@ -74,7 +74,14 @@ export default async function QuoteDetailPage({
             {formatDate(quote.created_at)}
           </>
         }
-        actions={<StatusBadge kind="quote" status={quote.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <StatusBadge kind="quote" status={quote.status} />
+            <Link href={`/quotes/${quote.id}/imprimir`} className="btn btn-secondary btn-sm">
+              Imprimir
+            </Link>
+          </div>
+        }
       />
 
       <div className="grid gap-5">

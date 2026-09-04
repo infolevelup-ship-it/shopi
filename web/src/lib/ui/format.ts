@@ -48,6 +48,23 @@ export function formatDateTime(iso: string | null | undefined) {
   });
 }
 
+/**
+ * Con año, para documentos que se imprimen y se archivan. `formatDateTime`
+ * omite el año a propósito (en una lista de actividad reciente sería ruido),
+ * pero en un recibo en papel un documento de hace un año se vería idéntico a
+ * uno de hoy.
+ */
+export function formatDateTimeLong(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("es-CO", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** "hace 3 min", "hace 2 h", "hace 4 días" — antigüedad en la cola de bodega. */
 export function formatRelative(iso: string | null | undefined) {
   if (!iso) return "—";
