@@ -11,7 +11,7 @@ import { FiscalCard } from "./fiscal-card";
 import { ReceiptsPanel } from "./receipts-panel";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatMoney } from "@/lib/ui/format";
-import { PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
+import { EDITABLE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, labelOf } from "@/lib/ui/fiscal";
 import { listOrderReceipts } from "@/lib/actions/receipts";
 
@@ -83,6 +83,7 @@ export default async function OrderDetailPage({
     !!profile &&
     (profile.id === order.seller_id || profile.role === "SUPERVISOR" || profile.role === "ADMIN");
   const canReview = isReviewer && order.status === "IN_REVIEW";
+  const canEditOrder = canAct && EDITABLE_ORDER_STATUSES.includes(order.status);
   // doc 01 §18 / doc 05 §6: solo bodega o admin factura — supervisor queda
   // fuera por defecto (doc 05 §6 lo marca "según política" sin definirla).
   const canInvoice = !!profile && (profile.role === "WAREHOUSE" || profile.role === "ADMIN");
@@ -166,6 +167,15 @@ export default async function OrderDetailPage({
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge kind="order" status={order.status} />
+            {/* doc 11 §49: desde el pedido se edita, se imprime y se va al
+                cliente. Editar solo aparece mientras el pedido sigue siendo de
+                la vendedora — son las mismas dos condiciones que aplica
+                `update_order` en la base. */}
+            {canEditOrder && (
+              <Link href={`/orders/${order.id}/editar`} className="btn btn-secondary btn-sm">
+                Editar
+              </Link>
+            )}
             {/* doc 11 §41: imprimir es una acción aparte y sin efecto fiscal,
                 por eso vive aquí arriba y no junto a "Facturar en Siigo", que
                 está al final de la página. */}

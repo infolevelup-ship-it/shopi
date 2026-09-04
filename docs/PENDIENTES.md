@@ -131,8 +131,7 @@ crean cotizaciones y pedidos.
 
 ## Fase 5 (pedidos) — construido parcialmente, fast-follow pendiente
 
-- [ ] Editar pedido existente (hoy solo crear, enviar a revisión o cancelar — no editar líneas
-      después de creado, doc 04 §8 lo permite en DRAFT/SUBMITTED/RETURNED_TO_SELLER).
+- [x] Editar pedido existente — hecho en la Fase G (ver su sección más abajo).
 - [ ] Comprobante de pago (`attachments`, máximo 3 por pedido, doc 02 §15) — deliberadamente fuera
       de esta pasada: necesita un bucket de Supabase Storage con sus propias políticas, es un
       subsistema aparte que merece su propia pasada probada con cuidado, no ir pegado aquí.
@@ -684,7 +683,7 @@ Sigue pendiente del plan acordado (fases D a G, en ese orden):
 - [x] **D** — comprobantes de pago. Ver la sección propia más abajo.
 - [x] **E** — impresión/PDF. Ver la sección propia más abajo.
 - [x] **F** — visitas a prospectos. Ver la sección propia más abajo.
-- [ ] **G** — editar el pedido mientras está en `DRAFT` o `RETURNED_TO_SELLER`.
+- [x] **G** — editar el pedido. Ver la sección propia más abajo.
 
 ## Fase D (comprobantes de pago) — construido y probado
 
@@ -831,6 +830,53 @@ Decidido a propósito:
       ser configurable; por ahora es código, igual que el resto de catálogos.
 - [ ] Se sembraron 5 prospectos de prueba (con historial de visitas) marcados `SEED:` en las
       notas, como el resto de datos de prueba. Hay que borrarlos antes de operar de verdad.
+
+## Fase G (editar pedido) — construido y probado
+
+Migración `0020_edit_order.sql`. Dos cosas, y la segunda era un hueco real del flujo.
+
+- [x] `update_order()` reemplaza líneas y condiciones y **recalcula los totales con la misma
+      aritmética de `create_order`**. Va `security definer` porque `orders` no tiene política de
+      UPDATE — todas las transiciones pasan por funciones (doc 03 §9).
+- [x] Pantalla `/orders/[id]/editar` y botón "Editar" en el detalle, junto a "Imprimir" y lejos de
+      "Facturar en Siigo" (doc 11 §49).
+- [x] El formulario de pedido se extrajo a `src/components/order-form.tsx` y lo comparten alta y
+      edición. Si fueran dos pantallas separadas, cada regla nueva (una lista de precio, un medio
+      de pago) habría que recordarla en las dos y tarde o temprano se separarían.
+- [x] Probado con sesiones JWT reales: totales recalculados a mano (350.000 − 30.000 = 320.000
+      neto, IVA 60.800, total 380.800), edición bloqueada en IN_REVIEW sin corromper las líneas,
+      pedido sin productos rechazado, y otra vendedora rechazada.
+
+**El hueco que apareció: un pedido devuelto no se podía reenviar.** `submit_order` solo aceptaba
+`DRAFT`, así que bodega devolvía un pedido para corrección y la vendedora ya no tenía forma de
+mandarlo de vuelta — quedaba atascado en `RETURNED_TO_SELLER` para siempre. Sin arreglar eso,
+poder editarlo no servía de nada. Ahora acepta `DRAFT` y `RETURNED_TO_SELLER`, y el panel de
+acciones muestra "Reenviar a bodega". Ciclo completo verificado en la bitácora de estados:
+`DRAFT → SUBMITTED → IN_REVIEW → RETURNED_TO_SELLER → SUBMITTED`.
+
+Ampliación sobre lo que se había acordado, a propósito:
+
+- El plan decía "editar en `DRAFT` o `RETURNED_TO_SELLER`", pero **doc 04 §8 también permite
+  `SUBMITTED` y `PENDING_REVIEW`**, y tiene razón: en esos dos estados el pedido solo está en la
+  cola y nadie lo ha abierto, así que una vendedora que ve un error justo después de enviarlo
+  debería poder corregirlo sin cancelar y rehacer. La frontera real es `IN_REVIEW`, donde bodega
+  ya lo tiene en la mano verificando contra el físico. Se implementó el conjunto del documento.
+- La carrera "la vendedora edita mientras bodega abre el pedido" es segura: `start_order_review`
+  lo pasa a `IN_REVIEW` y el guardado posterior se rechaza con un mensaje claro, sin tocar las
+  líneas. Verificado.
+
+Decidido a propósito:
+
+- [ ] **El cliente no se cambia al editar**: un pedido para otro cliente es otro pedido, no una
+      edición de este. Si se necesitara, hay que decidir antes qué pasa con el responsable
+      comercial y con la oportunidad ya creada en GHL.
+- [ ] Editar **no re-sincroniza GHL**. La oportunidad se creó al crear el pedido con los totales
+      de ese momento; después de una edición quedan desfasados. Hay que decidir si `update_order`
+      debe disparar la sincronización, junto con el resto de pendientes de GHL.
+- [ ] `EDITABLE_ORDER_STATUSES` (en `src/lib/ui/status.ts`) duplica en TypeScript la condición que
+      aplica la función. Es a propósito — la pantalla no debe ofrecer un formulario que el servidor
+      va a rechazar — pero si una cambia hay que cambiar la otra.
+- [ ] Editar cotización en borrador sigue pendiente (ya estaba anotado en la Fase 4).
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

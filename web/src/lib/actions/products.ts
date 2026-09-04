@@ -37,6 +37,23 @@ export async function searchProducts(query: string): Promise<ProductSearchResult
   return data ?? [];
 }
 
+// Para editar un pedido hace falta re-tarifar sus líneas, y `order_items`
+// solo guarda el precio con el que se vendió, no las tres listas. Se traen los
+// productos por id para poder cambiar de lista sin perder esa capacidad.
+export async function getProductsByIds(ids: string[]): Promise<ProductSearchResult[]> {
+  if (ids.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      "id, code, name, brand, active, price_public, price_professional, price_salon, stock_cache, siigo_product_id",
+    )
+    .in("id", ids);
+
+  if (error) throw new Error(`No se pudieron cargar los productos: ${error.message}`);
+  return data ?? [];
+}
+
 export type CreateProductInput = {
   code: string;
   name: string;

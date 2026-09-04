@@ -132,6 +132,35 @@ export async function createOrderAction(input: CreateOrderInput): Promise<Create
   return { ok: true, orderId: data!.id };
 }
 
+// Editar un pedido que todavía es de la vendedora (DRAFT o
+// RETURNED_TO_SELLER). El cliente no se cambia: un pedido para otro cliente es
+// otro pedido, no una edición de este.
+export type UpdateOrderInput = Omit<CreateOrderInput, "customerId"> & { orderId: string };
+
+export async function updateOrderAction(input: UpdateOrderInput): Promise<CreateOrderResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("update_order", {
+    p_order_id: input.orderId,
+    p_items: input.items.map((i) => ({
+      product_id: i.productId,
+      quantity: i.quantity,
+      unit_price: i.unitPrice,
+      discount_percent: i.discountPercent ?? 0,
+    })),
+    p_payment_method: input.paymentMethod || undefined,
+    p_retention_percent: input.retentionPercent,
+    p_notes: input.notes || undefined,
+    p_channel: input.channel || undefined,
+    p_price_list: input.priceList || undefined,
+    p_payment_method_detail: input.paymentMethodDetail || undefined,
+    p_sale_origin: input.saleOrigin || undefined,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, orderId: data!.id };
+}
+
 export type ReviewQueueItem = {
   id: string;
   order_number: string;

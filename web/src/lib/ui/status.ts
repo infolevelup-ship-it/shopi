@@ -162,6 +162,18 @@ export function statusMeta(kind: StatusKind, status: string): StatusMeta {
   return REGISTRY[kind][status] ?? { label: status, tone: "neutral" };
 }
 
+// doc 04 §8: hasta dónde la vendedora puede seguir tocando su pedido. La
+// frontera es IN_REVIEW — ahí bodega ya lo abrió y lo está verificando contra
+// el físico. En SUBMITTED/PENDING_REVIEW solo está en la cola, nadie lo tomó.
+// Es la misma condición que aplica `update_order` en la base; si las dos se
+// separan, la pantalla deja escribir un formulario que el servidor rechaza.
+export const EDITABLE_ORDER_STATUSES = [
+  "DRAFT",
+  "SUBMITTED",
+  "PENDING_REVIEW",
+  "RETURNED_TO_SELLER",
+];
+
 export const ROLE_LABEL: Record<string, string> = {
   SELLER: "Vendedora",
   WAREHOUSE: "Bodega",

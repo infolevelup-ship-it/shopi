@@ -2776,6 +2776,72 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      update_order: {
+        Args: {
+          p_channel?: string
+          p_document_type?: string
+          p_items: Json
+          p_notes?: string
+          p_order_id: string
+          p_payment_method?: string
+          p_payment_method_detail?: string
+          p_price_list?: string
+          p_retention_percent?: number
+          p_sale_origin?: string
+        }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          channel: string | null
+          created_at: string
+          customer_id: string
+          delivered_at: string | null
+          discount_total: number
+          dispatched_at: string | null
+          dispatched_by: string | null
+          document_type: string | null
+          ghl_last_synced_at: string | null
+          ghl_opportunity_id: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
+          grand_total: number
+          id: string
+          invoice_number: string | null
+          invoiced_at: string | null
+          invoiced_by: string | null
+          invoicing_started_at: string | null
+          notes: string | null
+          order_number: string
+          payment_method: string | null
+          payment_method_detail: string | null
+          price_list: string | null
+          responsible_customer_owner_id: string
+          retention_percent: number
+          retention_total: number
+          return_reason: string | null
+          review_started_at: string | null
+          sale_origin: string | null
+          seller_id: string
+          siigo_invoice_id: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["order_status"]
+          submitted_at: string | null
+          subtotal_gross: number
+          subtotal_net: number
+          tax_total: number
+          updated_at: string
+          warehouse_reviewed_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       activity_type:

@@ -23,7 +23,12 @@ export function OrderActions({ orderId, status }: { orderId: string; status: str
     });
   }
 
-  const canSubmit = status === "DRAFT";
+  // Un pedido devuelto tiene que poder volver a bodega después de corregirlo;
+  // si no, RETURNED_TO_SELLER es un callejón sin salida.
+  const isReturned = status === "RETURNED_TO_SELLER";
+  const canSubmit = status === "DRAFT" || isReturned;
+  // Cancelar sigue limitado a DRAFT/SUBMITTED, que es lo que acepta
+  // `cancel_order`: un pedido ya revisado lo cancela un supervisor.
   const canCancel = status === "DRAFT" || status === "SUBMITTED";
 
   if (!canSubmit && !canCancel) return null;
@@ -43,7 +48,7 @@ export function OrderActions({ orderId, status }: { orderId: string; status: str
             onClick={() => run(() => submitOrderAction(orderId))}
             className="btn btn-primary btn-block-mobile"
           >
-            {isPending ? "Enviando…" : "Enviar a revisión"}
+            {isPending ? "Enviando…" : isReturned ? "Reenviar a bodega" : "Enviar a revisión"}
           </button>
         )}
         {canCancel && (
