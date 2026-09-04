@@ -683,7 +683,7 @@ Sigue pendiente del plan acordado (fases D a G, en ese orden):
 
 - [x] **D** — comprobantes de pago. Ver la sección propia más abajo.
 - [x] **E** — impresión/PDF. Ver la sección propia más abajo.
-- [ ] **F** — visitas a prospectos sobre la tabla `prospects` que ya existe.
+- [x] **F** — visitas a prospectos. Ver la sección propia más abajo.
 - [ ] **G** — editar el pedido mientras está en `DRAFT` o `RETURNED_TO_SELLER`.
 
 ## Fase D (comprobantes de pago) — construido y probado
@@ -778,6 +778,59 @@ Decidido a propósito:
 - [ ] No se pudo renderizar contra datos reales: la política de red del entorno bloquea
       `*.supabase.co`. La verificación visual se hizo con un banco de pruebas de datos fijos que
       usaba el mismo marcado y los mismos estilos, y luego se eliminó.
+
+## Fase F (prospectos y visitas) — construido y probado
+
+doc 01 §12 define el embudo del prospecto (NUEVO → CONTACTADO → INTERESADO → COTIZACIÓN →
+NEGOCIACIÓN → GANADO, o PERDIDO con motivo). La tabla `prospects` existía desde la Fase 1 sin
+ninguna pantalla. Migración `0019_prospect_visits.sql`.
+
+- [x] `/prospects` — lista de abiertos **ordenada por el próximo seguimiento**, con los vencidos
+      marcados en rojo: lo primero que necesita saber una vendedora al abrir la pantalla es a
+      quién le toca hoy. Pestaña aparte para ganados y perdidos.
+- [x] `/prospects/new` — alta sin datos fiscales. Un prospecto todavía no factura; pedirle NIT y
+      códigos DANE sería pedir lo que nadie tiene en una visita en frío.
+- [x] `/prospects/[id]` — ficha con historial de visitas, panel para registrar visita (tipo de
+      contacto, qué pasó, etapa resultante y próximo seguimiento), marcar como perdido con motivo,
+      y convertir en cliente.
+- [x] Convertir lleva a `/customers/new?prospecto=<id>` con los datos que ya se conocen; al
+      guardar, el prospecto queda cerrado como GANADO y enlazado al cliente. La ciudad del
+      prospecto es texto libre: solo se preselecciona si coincide con una del catálogo DANE — es
+      preferible dejarla vacía a guardar una ciudad sin código con la que después no se puede
+      facturar.
+- [x] "Prospectos" entra al menú y "Nuevo prospecto" a las acciones rápidas (doc 11 §21). Hasta
+      ahora estaban excluidos porque la pantalla no existía.
+- [x] Probado con sesiones JWT reales: 15 casos (crear, visita con y sin avance de etapa, el
+      historial guarda el cambio real, no se puede cerrar por la vía de una visita, perder sin
+      motivo se rechaza, convertir, convertir dos veces, visitar un cerrado, aislamiento entre
+      vendedoras en prospectos y en el historial, y supervisión que sí ve).
+
+Dos decisiones de modelo que vale la pena registrar:
+
+- **`prospects` no tiene política de UPDATE, y se dejó así.** Es el mismo hueco que ya mordió en
+  `quotes` (Fase 4) y en `attachments` (Fase D): sin política, el UPDATE no da error, simplemente
+  no afecta ninguna fila. En vez de abrir el UPDATE al cliente, todo cambio de etapa va como
+  función `security definer` que revalida dueño y estado — que es la regla del doc 03 §9.
+- **Se agregó la tabla `prospect_visits`, que no está en doc 02 §7.** `prospects` solo guarda
+  `first_visit_at` / `last_visit_at`, es decir un resumen. Registrar una visita contra ese modelo
+  pisaría la anterior y no dejaría rastro de qué se habló ni de quién fue, que es justamente lo
+  que se pidió construir. Conviene reflejarlo en doc 02 cuando se actualice.
+
+Bug real encontrado y corregido antes de aplicar:
+
+- `register_prospect_visit` hacía el UPDATE antes de insertar la fila del historial, así que
+  `stage_before` habría quedado con la etapa **nueva** y el historial diría que nunca hubo un
+  cambio de etapa. Se captura la etapa anterior antes del update.
+
+Decidido a propósito:
+
+- [ ] Convertir un prospecto **no crea el cliente**: crear un cliente exige la ficha fiscal
+      completa (DANE, responsabilidad fiscal) y eso ya lo resuelve `create_customer`. La función
+      solo enlaza y cierra.
+- [ ] La lista de motivos de pérdida vive en `src/lib/ui/prospects.ts`. doc 01 §12 dice que debe
+      ser configurable; por ahora es código, igual que el resto de catálogos.
+- [ ] Se sembraron 5 prospectos de prueba (con historial de visitas) marcados `SEED:` en las
+      notas, como el resto de datos de prueba. Hay que borrarlos antes de operar de verdad.
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

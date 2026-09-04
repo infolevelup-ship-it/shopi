@@ -261,6 +261,25 @@ create table prospects (
 );
 
 create index prospects_user_idx on prospects (user_id, stage);
+
+-- Historial de visitas (migración 0019). `prospects` solo guarda
+-- first_visit_at / last_visit_at, que es un resumen: registrar una visita
+-- contra ese modelo pisaría la anterior y no dejaría rastro de qué se habló ni
+-- de quién fue. Esta tabla sí es el historial.
+create table prospect_visits (
+  id uuid primary key default gen_random_uuid(),
+  prospect_id uuid not null references prospects(id) on delete cascade,
+  user_id uuid not null references users(id),
+  visited_at timestamptz not null default now(),
+  visit_type text,                       -- visita, llamada, whatsapp…
+  stage_before prospect_stage,
+  stage_after prospect_stage,
+  notes text,
+  next_follow_up_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index prospect_visits_prospect_idx on prospect_visits (prospect_id, visited_at desc);
 create index prospects_next_follow_up_idx on prospects (next_follow_up_at) where stage not in ('WON','LOST');
 
 -- ============================================================================
@@ -922,6 +941,7 @@ alter table customers enable row level security;
 alter table customer_assignments enable row level security;
 alter table customer_activities enable row level security;
 alter table prospects enable row level security;
+alter table prospect_visits enable row level security;
 alter table products enable row level security;
 alter table quotes enable row level security;
 alter table quote_items enable row level security;
@@ -985,6 +1005,22 @@ create policy prospects_select on prospects for select
   using (user_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
 create policy prospects_insert on prospects for insert
   with check (user_id = current_wow_user_id() or current_wow_role() in ('SUPERVISOR','ADMIN'));
+-- prospects NO tiene política de UPDATE a propósito: todo cambio de etapa pasa
+-- por función `security definer` que revalida dueño y estado (migración 0019 —
+-- register_prospect_visit, mark_prospect_lost, convert_prospect_to_customer).
+
+-- prospect_visits: se ve lo mismo que se puede ver del prospecto. Sin política
+-- de INSERT a propósito — las visitas solo entran por register_prospect_visit,
+-- para que no se puedan escribir sueltas.
+create policy prospect_visits_select on prospect_visits for select
+  using (
+    exists (
+      select 1 from prospects p
+      where p.id = prospect_visits.prospect_id
+        and (p.user_id = current_wow_user_id()
+             or current_wow_role() in ('SUPERVISOR','ADMIN'))
+    )
+  );
 
 -- products: catálogo de lectura para todos los roles internos; alta/edición
 -- solo admin (la sincronización real corre con service_role, no con esto)

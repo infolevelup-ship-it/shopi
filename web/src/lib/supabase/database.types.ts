@@ -1501,6 +1501,60 @@ export type Database = {
         }
         Relationships: []
       }
+      prospect_visits: {
+        Row: {
+          created_at: string
+          id: string
+          next_follow_up_at: string | null
+          notes: string | null
+          prospect_id: string
+          stage_after: Database["public"]["Enums"]["prospect_stage"] | null
+          stage_before: Database["public"]["Enums"]["prospect_stage"] | null
+          user_id: string
+          visit_type: string | null
+          visited_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          next_follow_up_at?: string | null
+          notes?: string | null
+          prospect_id: string
+          stage_after?: Database["public"]["Enums"]["prospect_stage"] | null
+          stage_before?: Database["public"]["Enums"]["prospect_stage"] | null
+          user_id: string
+          visit_type?: string | null
+          visited_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          next_follow_up_at?: string | null
+          notes?: string | null
+          prospect_id?: string
+          stage_after?: Database["public"]["Enums"]["prospect_stage"] | null
+          stage_before?: Database["public"]["Enums"]["prospect_stage"] | null
+          user_id?: string
+          visit_type?: string | null
+          visited_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospect_visits_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospect_visits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prospects: {
         Row: {
           city: string | null
@@ -2075,6 +2129,35 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      convert_prospect_to_customer: {
+        Args: { p_customer_id: string; p_prospect_id: string }
+        Returns: {
+          city: string | null
+          commercial_name: string | null
+          converted_at: string | null
+          created_at: string
+          customer_id: string | null
+          email: string | null
+          first_visit_at: string | null
+          id: string
+          last_visit_at: string | null
+          lost_reason: string | null
+          name: string
+          next_follow_up_at: string | null
+          notes: string | null
+          phone: string | null
+          source: string | null
+          stage: Database["public"]["Enums"]["prospect_stage"]
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "prospects"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_customer: {
         Args: {
           p_address?: string
@@ -2230,6 +2313,44 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_prospect: {
+        Args: {
+          p_city?: string
+          p_commercial_name?: string
+          p_email?: string
+          p_name: string
+          p_next_follow_up_at?: string
+          p_notes?: string
+          p_phone?: string
+          p_source?: string
+        }
+        Returns: {
+          city: string | null
+          commercial_name: string | null
+          converted_at: string | null
+          created_at: string
+          customer_id: string | null
+          email: string | null
+          first_visit_at: string | null
+          id: string
+          last_visit_at: string | null
+          lost_reason: string | null
+          name: string
+          next_follow_up_at: string | null
+          notes: string | null
+          phone: string | null
+          source: string | null
+          stage: Database["public"]["Enums"]["prospect_stage"]
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "prospects"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_quote: {
         Args: {
           p_customer_id: string
@@ -2280,6 +2401,35 @@ export type Database = {
       delete_order_receipt: {
         Args: { p_attachment_id: string }
         Returns: string
+      }
+      mark_prospect_lost: {
+        Args: { p_prospect_id: string; p_reason: string }
+        Returns: {
+          city: string | null
+          commercial_name: string | null
+          converted_at: string | null
+          created_at: string
+          customer_id: string | null
+          email: string | null
+          first_visit_at: string | null
+          id: string
+          last_visit_at: string | null
+          lost_reason: string | null
+          name: string
+          next_follow_up_at: string | null
+          notes: string | null
+          phone: string | null
+          source: string | null
+          stage: Database["public"]["Enums"]["prospect_stage"]
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "prospects"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       mark_quote_accepted: {
         Args: { p_quote_id: string }
@@ -2376,6 +2526,41 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "attachments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      register_prospect_visit: {
+        Args: {
+          p_next_follow_up_at?: string
+          p_notes?: string
+          p_prospect_id: string
+          p_stage?: Database["public"]["Enums"]["prospect_stage"]
+          p_visit_type?: string
+        }
+        Returns: {
+          city: string | null
+          commercial_name: string | null
+          converted_at: string | null
+          created_at: string
+          customer_id: string | null
+          email: string | null
+          first_visit_at: string | null
+          id: string
+          last_visit_at: string | null
+          lost_reason: string | null
+          name: string
+          next_follow_up_at: string | null
+          notes: string | null
+          phone: string | null
+          source: string | null
+          stage: Database["public"]["Enums"]["prospect_stage"]
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "prospects"
           isOneToOne: true
           isSetofReturn: false
         }

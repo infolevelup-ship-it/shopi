@@ -10,6 +10,7 @@ import {
   type DuplicateCheckResult,
 } from "@/lib/actions/customers";
 import type { DaneLocation } from "@/lib/actions/dane";
+import { convertProspectAction } from "@/lib/actions/prospects";
 import {
   CHANNELS,
   CUSTOMER_CLASSIFICATIONS,
@@ -101,9 +102,46 @@ function Fieldset({
   );
 }
 
-export function NewCustomerForm({ locations }: { locations: DaneLocation[] }) {
+export type ProspectPrefill = {
+  id: string;
+  name: string;
+  commercialName: string | null;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+};
+
+export function NewCustomerForm({
+  locations,
+  fromProspect = null,
+}: {
+  locations: DaneLocation[];
+  fromProspect?: ProspectPrefill | null;
+}) {
   const router = useRouter();
-  const [form, setForm] = useState<FormState>(initialState);
+  const [form, setForm] = useState<FormState>(() => {
+    if (!fromProspect) return initialState;
+    // La ciudad del prospecto es texto libre: si coincide con una del catálogo
+    // DANE se preselecciona con sus códigos; si no, se deja vacía para que la
+    // vendedora la elija, en vez de guardar una ciudad sin código con la que
+    // luego no se puede facturar.
+    const match = fromProspect.city
+      ? locations.find(
+          (l) => l.city_name.toLowerCase() === fromProspect.city!.trim().toLowerCase(),
+        )
+      : undefined;
+    return {
+      ...initialState,
+      // Un salón suele ser persona natural hasta que dice lo contrario, pero
+      // el nombre del prospecto no distingue: se deja el tipo por defecto y
+      // solo se traslada el nombre comercial, que sí aplica a ambos casos.
+      commercialName: fromProspect.commercialName ?? fromProspect.name,
+      phone: fromProspect.phone ?? "",
+      email: fromProspect.email ?? "",
+      department: match?.department ?? "",
+      cityCode: match?.city_code ?? "",
+    };
+  });
   const [error, setError] = useState<string | null>(null);
   const [existingCustomerId, setExistingCustomerId] = useState<string | null>(null);
   const [phoneWarning, setPhoneWarning] = useState<DuplicateCheckResult["phoneMatches"]>([]);
@@ -171,6 +209,20 @@ export function NewCustomerForm({ locations }: { locations: DaneLocation[] }) {
       setExistingCustomerId(result.existingCustomerId ?? null);
       return;
     }
+
+    if (fromProspect) {
+      // El cliente ya existe pase lo que pase aquí; si el enlace falla se
+      // avisa en vez de perder al cliente recién creado, y el prospecto se
+      // puede cerrar a mano.
+      const linked = await convertProspectAction(fromProspect.id, result.customerId);
+      if (!linked.ok) {
+        setError(
+          `El cliente se creó, pero no se pudo cerrar el prospecto: ${linked.error}`,
+        );
+        return;
+      }
+    }
+
     router.push(`/customers/${result.customerId}`);
   }
 
@@ -740,7 +792,7 @@ export function NewCustomerForm({ locations }: { locations: DaneLocation[] }) {
       )}
 
       <button type="submit" disabled={isPending} className="btn btn-primary btn-block-mobile">
-        {isPending ? "Verificando…" : "Crear cliente"}
+        {isPending ? "Verificando…" : fromProspect ? "Crear cliente y cerrar prospecto" : "Crear cliente"}
       </button>
     </form>
   );

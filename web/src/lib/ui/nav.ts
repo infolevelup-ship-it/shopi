@@ -1,8 +1,8 @@
 // Navegación por rol (doc 11 §2/§3). Regla deliberada: aquí solo van
-// destinos que EXISTEN. El doc 11 dibuja además Prospectos, Despachos y
-// Configuración — esas pantallas no están construidas todavía (no son
-// rediseño, son funcionalidad nueva), y un enlace del menú que lleva a una
-// pantalla inexistente es peor que un menú más corto.
+// destinos que EXISTEN. El doc 11 dibuja además Despachos y Configuración —
+// esas pantallas no están construidas todavía (no son rediseño, son
+// funcionalidad nueva), y un enlace del menú que lleva a una pantalla
+// inexistente es peor que un menú más corto.
 
 export type NavItem = {
   href: string;
@@ -24,6 +24,13 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Comercial",
     items: [
       { href: "/customers", label: "Clientes", icon: "👥", match: "/customers" },
+      {
+        href: "/prospects",
+        label: "Prospectos",
+        icon: "🎯",
+        match: "/prospects",
+        roles: ["SELLER", "SUPERVISOR", "ADMIN"],
+      },
       {
         href: "/quotes",
         label: "Cotizaciones",
@@ -96,6 +103,12 @@ export function quickActions(role: string): NavItem[] {
       href: "/customers/new",
       label: "Nuevo cliente",
       icon: "👥",
+      roles: ["SELLER", "SUPERVISOR", "ADMIN"],
+    },
+    {
+      href: "/prospects/new",
+      label: "Nuevo prospecto",
+      icon: "🎯",
       roles: ["SELLER", "SUPERVISOR", "ADMIN"],
     },
     { href: "/products/new", label: "Nuevo producto", icon: "📦", roles: ["ADMIN"] },

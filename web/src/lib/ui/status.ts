@@ -135,12 +135,25 @@ const FOLLOW_UP: Record<string, StatusMeta> = {
   CANCELLED: { label: "Cancelado", tone: "neutral" },
 };
 
+// doc 01 §12: el embudo del prospecto, con el mismo criterio de color que el
+// resto de la app.
+const PROSPECT: Record<string, StatusMeta> = {
+  NEW: { label: "Nuevo", tone: "neutral", meaning: "Todavía no se ha contactado." },
+  CONTACTED: { label: "Contactado", tone: "info", meaning: "Ya hubo un primer contacto." },
+  INTERESTED: { label: "Interesado", tone: "info", meaning: "Mostró interés real en comprar." },
+  QUOTE: { label: "Cotizado", tone: "warning", meaning: "Se le pasó una cotización." },
+  NEGOTIATION: { label: "En negociación", tone: "warning", meaning: "Discutiendo precio o condiciones." },
+  WON: { label: "Ganado", tone: "success", meaning: "Se convirtió en cliente." },
+  LOST: { label: "Perdido", tone: "danger", meaning: "No va a comprar; queda el motivo registrado." },
+};
+
 const REGISTRY = {
   order: ORDER,
   quote: QUOTE,
   customer: CUSTOMER,
   invoice: INVOICE,
   followUp: FOLLOW_UP,
+  prospect: PROSPECT,
 } as const;
 
 export type StatusKind = keyof typeof REGISTRY;
