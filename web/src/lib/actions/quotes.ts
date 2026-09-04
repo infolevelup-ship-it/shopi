@@ -72,22 +72,35 @@ export type CreateQuoteResult =
   | { ok: true; quoteId: string }
   | { ok: false; error: string };
 
-export async function createQuoteAction(
-  customerId: string,
-  items: QuoteItemInput[],
-  notes?: string,
-): Promise<CreateQuoteResult> {
+export type CreateQuoteInput = {
+  customerId: string;
+  items: QuoteItemInput[];
+  notes?: string;
+  /** Lista de precio con la que se cotizó. */
+  priceList?: string;
+  /** Misma retención que el pedido, para que el total cotizado sea el que se paga. */
+  retentionPercent?: number;
+  paymentMethod?: string;
+  /** Hasta cuándo se sostienen estos precios (YYYY-MM-DD). */
+  validUntil?: string;
+};
+
+export async function createQuoteAction(input: CreateQuoteInput): Promise<CreateQuoteResult> {
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("create_quote", {
-    p_customer_id: customerId,
-    p_items: items.map((i) => ({
+    p_customer_id: input.customerId,
+    p_items: input.items.map((i) => ({
       product_id: i.productId,
       quantity: i.quantity,
       unit_price: i.unitPrice,
       discount_percent: i.discountPercent ?? 0,
     })),
-    p_notes: notes || undefined,
+    p_notes: input.notes || undefined,
+    p_price_list: input.priceList || undefined,
+    p_retention_percent: input.retentionPercent ?? 0,
+    p_payment_method: input.paymentMethod || undefined,
+    p_valid_until: input.validUntil || undefined,
   });
 
   if (error) {

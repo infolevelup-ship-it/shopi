@@ -5,6 +5,18 @@ import { getCurrentProfile } from "@/lib/auth";
 import { QuoteActions } from "./quote-actions";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatDate, formatMoney } from "@/lib/ui/format";
+import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
+import { PRICE_LISTS } from "@/lib/ui/fiscal";
+
+function Condition({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between gap-3 sm:justify-start">
+      <dt className="text-text-soft">{label}:</dt>
+      <dd className="text-text">{value}</dd>
+    </div>
+  );
+}
 
 export default async function QuoteDetailPage({
   params,
@@ -18,7 +30,7 @@ export default async function QuoteDetailPage({
     supabase
       .from("quotes")
       .select(
-        "id, quote_number, status, subtotal, discount_total, tax_total, grand_total, notes, created_at, sent_at, accepted_at, lost_at, lost_reason, seller_id, customer:customers(id, legal_name, first_name, last_name, commercial_name), seller:users!quotes_seller_id_fkey(name)",
+        "id, quote_number, status, price_list, payment_method, retention_percent, retention_total, valid_until, subtotal, discount_total, tax_total, grand_total, notes, created_at, sent_at, accepted_at, lost_at, lost_reason, seller_id, customer:customers(id, legal_name, first_name, last_name, commercial_name), seller:users!quotes_seller_id_fkey(name)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -131,10 +143,40 @@ export default async function QuoteDetailPage({
               <dt className="text-text-soft">IVA</dt>
               <dd>{formatMoney(quote.tax_total)}</dd>
             </div>
+            {quote.retention_total > 0 && (
+              <div className="flex justify-between">
+                <dt className="text-text-soft">
+                  Retención{quote.retention_percent ? ` (${quote.retention_percent}%)` : ""}
+                </dt>
+                <dd>-{formatMoney(quote.retention_total)}</dd>
+              </div>
+            )}
             <div className="flex items-center justify-between border-t border-line pt-2 text-base font-semibold">
               <dt>Total</dt>
               <dd>{formatMoney(quote.grand_total)}</dd>
             </div>
+          </dl>
+
+          {/* Lo que la vendedora le prometió al cliente: si la cotización se
+              convierte en pedido, esto es lo que debe respetarse. */}
+          <dl className="mt-3 grid gap-1 border-t border-line pt-3 text-sm sm:grid-cols-2">
+            {quote.payment_method && (
+              <Condition
+                label="Forma de pago"
+                value={PAYMENT_METHOD_LABEL[quote.payment_method] ?? quote.payment_method}
+              />
+            )}
+            {quote.price_list && (
+              <Condition
+                label="Lista de precio"
+                value={
+                  PRICE_LISTS.find((p) => p.value === quote.price_list)?.label ?? quote.price_list
+                }
+              />
+            )}
+            {quote.valid_until && (
+              <Condition label="Válida hasta" value={formatDate(quote.valid_until)} />
+            )}
           </dl>
 
           {quote.notes && (

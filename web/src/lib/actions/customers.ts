@@ -236,6 +236,28 @@ export type CreateCustomerInput = {
   phone?: string;
   address?: string;
   city?: string;
+  // ficha fiscal — lo que Siigo necesita para poder emitir la factura
+  checkDigit?: string;
+  branchCode?: string;
+  department?: string;
+  stateCode?: string;
+  cityCode?: string;
+  postalCode?: string;
+  fiscalResponsibility?: string;
+  vatResponsible?: boolean;
+  // persona de contacto del salón
+  phoneIndicative?: string;
+  contactFirstName?: string;
+  contactLastName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  // clasificación comercial
+  purchaseType?: string;
+  customerTypeClassification?: string;
+  channel?: string;
+  creditLimit?: number;
+  websiteSocial?: string;
+  birthday?: string;
 };
 
 export type CreateCustomerResult =
@@ -259,6 +281,25 @@ export async function createCustomerAction(
     p_phone: input.phone || undefined,
     p_address: input.address || undefined,
     p_city: input.city || undefined,
+    p_check_digit: input.checkDigit || undefined,
+    p_branch_code: input.branchCode || undefined,
+    p_department: input.department || undefined,
+    p_state_code: input.stateCode || undefined,
+    p_city_code: input.cityCode || undefined,
+    p_postal_code: input.postalCode || undefined,
+    p_fiscal_responsibility: input.fiscalResponsibility || undefined,
+    p_vat_responsible: input.vatResponsible ?? undefined,
+    p_phone_indicative: input.phoneIndicative || undefined,
+    p_contact_first_name: input.contactFirstName || undefined,
+    p_contact_last_name: input.contactLastName || undefined,
+    p_contact_email: input.contactEmail || undefined,
+    p_contact_phone: input.contactPhone || undefined,
+    p_purchase_type: input.purchaseType || undefined,
+    p_customer_type_classification: input.customerTypeClassification || undefined,
+    p_channel: input.channel || undefined,
+    p_credit_limit: input.creditLimit ?? undefined,
+    p_website_social: input.websiteSocial || undefined,
+    p_birthday: input.birthday || undefined,
   });
 
   if (error) {

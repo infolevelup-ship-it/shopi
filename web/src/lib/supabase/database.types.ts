@@ -446,11 +446,17 @@ export type Database = {
       customers: {
         Row: {
           address: string | null
+          birthday: string | null
+          branch_code: string | null
           channel: string | null
           check_digit: string | null
           city: string | null
           city_code: string | null
           commercial_name: string | null
+          contact_email: string | null
+          contact_first_name: string | null
+          contact_last_name: string | null
+          contact_phone: string | null
           created_at: string
           credit_limit: number | null
           customer_type: string
@@ -474,6 +480,7 @@ export type Database = {
           legal_name: string | null
           merged_into_customer_id: string | null
           phone: string | null
+          phone_indicative: string | null
           postal_code: string | null
           purchase_type: string | null
           responsible_user_id: string | null
@@ -488,11 +495,17 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          birthday?: string | null
+          branch_code?: string | null
           channel?: string | null
           check_digit?: string | null
           city?: string | null
           city_code?: string | null
           commercial_name?: string | null
+          contact_email?: string | null
+          contact_first_name?: string | null
+          contact_last_name?: string | null
+          contact_phone?: string | null
           created_at?: string
           credit_limit?: number | null
           customer_type: string
@@ -518,6 +531,7 @@ export type Database = {
           legal_name?: string | null
           merged_into_customer_id?: string | null
           phone?: string | null
+          phone_indicative?: string | null
           postal_code?: string | null
           purchase_type?: string | null
           responsible_user_id?: string | null
@@ -532,11 +546,17 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          birthday?: string | null
+          branch_code?: string | null
           channel?: string | null
           check_digit?: string | null
           city?: string | null
           city_code?: string | null
           commercial_name?: string | null
+          contact_email?: string | null
+          contact_first_name?: string | null
+          contact_last_name?: string | null
+          contact_phone?: string | null
           created_at?: string
           credit_limit?: number | null
           customer_type?: string
@@ -562,6 +582,7 @@ export type Database = {
           legal_name?: string | null
           merged_into_customer_id?: string | null
           phone?: string | null
+          phone_indicative?: string | null
           postal_code?: string | null
           purchase_type?: string | null
           responsible_user_id?: string | null
@@ -597,6 +618,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      dane_locations: {
+        Row: {
+          city_code: string
+          city_name: string
+          department: string
+          state_code: string
+        }
+        Insert: {
+          city_code: string
+          city_name: string
+          department: string
+          state_code: string
+        }
+        Update: {
+          city_code?: string
+          city_name?: string
+          department?: string
+          state_code?: string
+        }
+        Relationships: []
       }
       follow_ups: {
         Row: {
@@ -1174,6 +1216,7 @@ export type Database = {
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
+          sale_origin: string | null
           seller_id: string
           siigo_invoice_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
@@ -1221,6 +1264,7 @@ export type Database = {
           retention_total?: number
           return_reason?: string | null
           review_started_at?: string | null
+          sale_origin?: string | null
           seller_id: string
           siigo_invoice_id?: string | null
           source_type?: Database["public"]["Enums"]["order_source_type"]
@@ -1268,6 +1312,7 @@ export type Database = {
           retention_total?: number
           return_reason?: string | null
           review_started_at?: string | null
+          sale_origin?: string | null
           seller_id?: string
           siigo_invoice_id?: string | null
           source_type?: Database["public"]["Enums"]["order_source_type"]
@@ -1625,8 +1670,10 @@ export type Database = {
           lost_at: string | null
           lost_reason: string | null
           notes: string | null
+          payment_method: string | null
           price_list: string | null
           quote_number: string
+          retention_percent: number
           retention_total: number
           seller_id: string
           sent_at: string | null
@@ -1648,8 +1695,10 @@ export type Database = {
           lost_at?: string | null
           lost_reason?: string | null
           notes?: string | null
+          payment_method?: string | null
           price_list?: string | null
           quote_number: string
+          retention_percent?: number
           retention_total?: number
           seller_id: string
           sent_at?: string | null
@@ -1671,8 +1720,10 @@ export type Database = {
           lost_at?: string | null
           lost_reason?: string | null
           notes?: string | null
+          payment_method?: string | null
           price_list?: string | null
           quote_number?: string
+          retention_percent?: number
           retention_total?: number
           seller_id?: string
           sent_at?: string | null
@@ -1926,6 +1977,7 @@ export type Database = {
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
+          sale_origin: string | null
           seller_id: string
           siigo_invoice_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
@@ -1980,6 +2032,7 @@ export type Database = {
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
+          sale_origin: string | null
           seller_id: string
           siigo_invoice_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
@@ -2025,24 +2078,49 @@ export type Database = {
       create_customer: {
         Args: {
           p_address?: string
+          p_birthday?: string
+          p_branch_code?: string
+          p_channel?: string
+          p_check_digit?: string
           p_city?: string
+          p_city_code?: string
           p_commercial_name?: string
+          p_contact_email?: string
+          p_contact_first_name?: string
+          p_contact_last_name?: string
+          p_contact_phone?: string
+          p_credit_limit?: number
           p_customer_type: string
+          p_customer_type_classification?: string
+          p_department?: string
           p_document_number: string
           p_document_type: string
           p_email?: string
           p_first_name?: string
+          p_fiscal_responsibility?: string
           p_last_name?: string
           p_legal_name?: string
           p_phone?: string
+          p_phone_indicative?: string
+          p_postal_code?: string
+          p_purchase_type?: string
+          p_state_code?: string
+          p_vat_responsible?: boolean
+          p_website_social?: string
         }
         Returns: {
           address: string | null
+          birthday: string | null
+          branch_code: string | null
           channel: string | null
           check_digit: string | null
           city: string | null
           city_code: string | null
           commercial_name: string | null
+          contact_email: string | null
+          contact_first_name: string | null
+          contact_last_name: string | null
+          contact_phone: string | null
           created_at: string
           credit_limit: number | null
           customer_type: string
@@ -2066,6 +2144,7 @@ export type Database = {
           legal_name: string | null
           merged_into_customer_id: string | null
           phone: string | null
+          phone_indicative: string | null
           postal_code: string | null
           purchase_type: string | null
           responsible_user_id: string | null
@@ -2089,10 +2168,14 @@ export type Database = {
         Args: {
           p_channel?: string
           p_customer_id: string
+          p_document_type?: string
           p_items: Json
           p_notes?: string
           p_payment_method?: string
+          p_payment_method_detail?: string
+          p_price_list?: string
           p_retention_percent?: number
+          p_sale_origin?: string
         }
         Returns: {
           approved_at: string | null
@@ -2128,6 +2211,7 @@ export type Database = {
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
+          sale_origin: string | null
           seller_id: string
           siigo_invoice_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
@@ -2151,7 +2235,9 @@ export type Database = {
           p_customer_id: string
           p_items: Json
           p_notes?: string
+          p_payment_method?: string
           p_price_list?: string
+          p_retention_percent?: number
           p_valid_until?: string
         }
         Returns: {
@@ -2165,8 +2251,10 @@ export type Database = {
           lost_at: string | null
           lost_reason: string | null
           notes: string | null
+          payment_method: string | null
           price_list: string | null
           quote_number: string
+          retention_percent: number
           retention_total: number
           seller_id: string
           sent_at: string | null
@@ -2202,8 +2290,10 @@ export type Database = {
           lost_at: string | null
           lost_reason: string | null
           notes: string | null
+          payment_method: string | null
           price_list: string | null
           quote_number: string
+          retention_percent: number
           retention_total: number
           seller_id: string
           sent_at: string | null
@@ -2234,8 +2324,10 @@ export type Database = {
           lost_at: string | null
           lost_reason: string | null
           notes: string | null
+          payment_method: string | null
           price_list: string | null
           quote_number: string
+          retention_percent: number
           retention_total: number
           seller_id: string
           sent_at: string | null
@@ -2303,6 +2395,7 @@ export type Database = {
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
+          sale_origin: string | null
           seller_id: string
           siigo_invoice_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
@@ -2334,8 +2427,10 @@ export type Database = {
           lost_at: string | null
           lost_reason: string | null
           notes: string | null
+          payment_method: string | null
           price_list: string | null
           quote_number: string
+          retention_percent: number
           retention_total: number
           seller_id: string
           sent_at: string | null
@@ -2389,6 +2484,7 @@ export type Database = {
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
+          sale_origin: string | null
           seller_id: string
           siigo_invoice_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
@@ -2443,6 +2539,7 @@ export type Database = {
           retention_total: number
           return_reason: string | null
           review_started_at: string | null
+          sale_origin: string | null
           seller_id: string
           siigo_invoice_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]

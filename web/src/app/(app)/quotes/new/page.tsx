@@ -11,8 +11,33 @@ import { searchProducts, type ProductSearchResult } from "@/lib/actions/products
 import { createQuoteAction, type QuoteItemInput } from "@/lib/actions/quotes";
 import { PageHeader } from "@/components/ui";
 import { customerDisplayName, formatMoney } from "@/lib/ui/format";
+import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
+import { PRICE_LISTS, type PriceList } from "@/lib/ui/fiscal";
 
-type Line = QuoteItemInput & { key: string; code: string; name: string };
+const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => ({
+  value,
+  label,
+}));
+
+// Las mismas tasas verificadas contra Siigo que usa el pedido: una
+// cotización que promete un total con una retención inexistente termina en
+// una factura que no cuadra con lo cotizado.
+const RETENTION_RATES = [0, 1, 2, 2.5, 3.5, 4, 6, 7, 11];
+
+type Line = QuoteItemInput & {
+  key: string;
+  code: string;
+  name: string;
+  // Las tres listas viajan en la línea para poder re-tarifar sin volver a
+  // consultar el producto.
+  prices: Record<PriceList, number | null>;
+};
+
+function priceFor(p: ProductSearchResult, list: PriceList) {
+  if (list === "profesional") return p.price_professional;
+  if (list === "salon") return p.price_salon;
+  return p.price_public;
+}
 
 function lineTotal(line: Line) {
   const subtotal = line.quantity * line.unitPrice;
@@ -33,6 +58,10 @@ function NewQuoteForm() {
   const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
 
   const [lines, setLines] = useState<Line[]>([]);
+  const [priceList, setPriceList] = useState<PriceList>("salon");
+  const [paymentMethod, setPaymentMethod] = useState("contado");
+  const [retentionPercent, setRetentionPercent] = useState(0);
+  const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -79,13 +108,29 @@ function NewQuoteForm() {
         productId: p.id,
         code: p.code,
         name: p.name,
+        prices: {
+          publico: p.price_public,
+          profesional: p.price_professional,
+          salon: p.price_salon,
+        },
         quantity: 1,
-        unitPrice: p.price_public ?? 0,
+        unitPrice: priceFor(p, priceList) ?? p.price_public ?? 0,
         discountPercent: 0,
       },
     ]);
     setProductQuery("");
     setProductResults([]);
+  }
+
+  function applyPriceList(list: PriceList) {
+    setPriceList(list);
+    setLines((ls) =>
+      ls.map((l) => {
+        const next = l.prices[list];
+        // Un producto sin precio en esa lista conserva el que ya tenía.
+        return next === null ? l : { ...l, unitPrice: next };
+      }),
+    );
   }
 
   function updateLine(key: string, patch: Partial<Line>) {
@@ -97,6 +142,7 @@ function NewQuoteForm() {
   }
 
   const total = lines.reduce((sum, l) => sum + lineTotal(l), 0);
+  const retentionEstimate = total * (retentionPercent / 100);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -112,16 +158,20 @@ function NewQuoteForm() {
     }
 
     startTransition(async () => {
-      const result = await createQuoteAction(
-        customer.id,
-        lines.map(({ productId, quantity, unitPrice, discountPercent }) => ({
+      const result = await createQuoteAction({
+        customerId: customer.id,
+        items: lines.map(({ productId, quantity, unitPrice, discountPercent }) => ({
           productId,
           quantity,
           unitPrice,
           discountPercent,
         })),
-        notes || undefined,
-      );
+        notes: notes || undefined,
+        priceList,
+        retentionPercent,
+        paymentMethod,
+        validUntil: validUntil || undefined,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -135,6 +185,28 @@ function NewQuoteForm() {
       <PageHeader back={{ href: "/quotes", label: "Cotizaciones" }} title="Nueva cotización" />
 
       <form onSubmit={handleSubmit} className="grid gap-5">
+        <section className="card card-pad">
+          <label htmlFor="price-list" className="field-label">
+            Lista de precio
+          </label>
+          <select
+            id="price-list"
+            value={priceList}
+            onChange={(e) => applyPriceList(e.target.value as PriceList)}
+            className="select"
+          >
+            {PRICE_LISTS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-text-muted">
+            Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Si
+            editaste un precio a mano, se pierde ese cambio.
+          </p>
+        </section>
+
         <section className="card card-pad">
           <label className="field-label">Cliente</label>
           {customer ? (
@@ -208,7 +280,7 @@ function NewQuoteForm() {
                       <span className="block text-sm text-text-soft">{p.code}</span>
                     </span>
                     <span className="font-medium whitespace-nowrap">
-                      {formatMoney(p.price_public)}
+                      {formatMoney(priceFor(p, priceList) ?? p.price_public)}
                     </span>
                   </button>
                 ))}
@@ -288,6 +360,12 @@ function NewQuoteForm() {
                 <span className="text-text-soft">Estimado (antes de IVA)</span>
                 <span className="font-semibold">{formatMoney(total)}</span>
               </div>
+              {retentionPercent > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-text-soft">Retención estimada</span>
+                  <span>-{formatMoney(retentionEstimate)}</span>
+                </div>
+              )}
               <p className="mt-1 text-xs text-text-muted">
                 El total real (con IVA y descuentos) lo calcula el servidor al guardar.
               </p>
@@ -296,16 +374,71 @@ function NewQuoteForm() {
         </section>
 
         <section className="card card-pad">
-          <label htmlFor="quote-notes" className="field-label">
-            Notas (opcional)
-          </label>
-          <textarea
-            id="quote-notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            className="textarea"
-          />
+          <h2 className="mb-3 text-base font-semibold">Condiciones</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="quote-payment" className="field-label">
+                Forma de pago propuesta
+              </label>
+              <select
+                id="quote-payment"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="select"
+              >
+                {PAYMENT_METHODS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="quote-retention" className="field-label">
+                Retención
+              </label>
+              <select
+                id="quote-retention"
+                value={retentionPercent}
+                onChange={(e) => setRetentionPercent(Number(e.target.value))}
+                className="select"
+              >
+                {RETENTION_RATES.map((r) => (
+                  <option key={r} value={r}>
+                    {r === 0 ? "Sin retención" : `${r}%`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="valid-until" className="field-label">
+                Válida hasta
+              </label>
+              <input
+                id="valid-until"
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+                className="input"
+              />
+              <p className="mt-1 text-xs text-text-muted">
+                Hasta cuándo se sostienen estos precios.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <label htmlFor="quote-notes" className="field-label">
+              Notas (opcional)
+            </label>
+            <textarea
+              id="quote-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="textarea"
+            />
+          </div>
         </section>
 
         {error && (

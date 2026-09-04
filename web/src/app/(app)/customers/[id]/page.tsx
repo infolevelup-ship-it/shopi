@@ -7,6 +7,12 @@ import { GhlSyncStatus } from "./ghl-sync-status";
 import { FollowUpsPanel } from "./followups-panel";
 import { Callout, PageHeader, StatTile, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatDate, formatDateTime, formatMoney } from "@/lib/ui/format";
+import {
+  CUSTOMER_CLASSIFICATIONS,
+  FISCAL_RESPONSIBILITIES,
+  PURCHASE_TYPES,
+  labelOf,
+} from "@/lib/ui/fiscal";
 
 const ACTIVITY_LABEL: Record<string, string> = {
   CALL: "Llamada",
@@ -51,7 +57,7 @@ export default async function CustomerDetailPage({
     supabase
       .from("customers")
       .select(
-        "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, email, phone, address, city, status, created_at, fiscal_responsibility, siigo_customer_id, responsible_user_id, ghl_sync_status, ghl_sync_error, responsible:users!customers_responsible_user_id_fkey(name)",
+        "id, customer_type, document_type, document_number, check_digit, legal_name, first_name, last_name, commercial_name, email, phone, phone_indicative, address, city, department, state_code, city_code, postal_code, status, created_at, fiscal_responsibility, vat_responsible, purchase_type, customer_type_classification, channel, credit_limit, website_social, birthday, branch_code, contact_first_name, contact_last_name, contact_email, contact_phone, siigo_customer_id, responsible_user_id, ghl_sync_status, ghl_sync_error, responsible:users!customers_responsible_user_id_fkey(name)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -114,6 +120,8 @@ export default async function CustomerDetailPage({
     profile?.role === "SELLER" &&
     !!customer.responsible_user_id &&
     customer.responsible_user_id !== profile.id;
+  const contactName =
+    `${customer.contact_first_name ?? ""} ${customer.contact_last_name ?? ""}`.trim() || null;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -122,7 +130,8 @@ export default async function CustomerDetailPage({
         title={customerDisplayName(customer)}
         subtitle={
           <>
-            {customer.document_type} {customer.document_number} ·{" "}
+            {customer.document_type} {customer.document_number}
+            {customer.check_digit ? `-${customer.check_digit}` : ""} ·{" "}
             {customer.customer_type === "juridica" ? "Empresa" : "Persona natural"} · Responsable:{" "}
             {responsible?.name ?? "sin asignar"}
           </>
@@ -201,13 +210,84 @@ export default async function CustomerDetailPage({
         <section className="card card-pad">
           <h2 className="mb-3 text-base font-semibold">Contacto y datos fiscales</h2>
           <dl className="grid gap-2 text-sm">
-            <Row label="Teléfono" value={customer.phone ?? "—"} />
-            <Row label="Correo" value={customer.email ?? "—"} />
-            <Row label="Ciudad" value={customer.city ?? "—"} />
+            <Row
+              label="Teléfono"
+              value={
+                customer.phone
+                  ? `${customer.phone_indicative ? `(${customer.phone_indicative}) ` : ""}${customer.phone}`
+                  : "—"
+              }
+            />
+            <Row label="Correo de facturación" value={customer.email ?? "—"} />
+            <Row
+              label="Ciudad"
+              value={
+                customer.city
+                  ? `${customer.city}${customer.department ? `, ${customer.department}` : ""}`
+                  : "—"
+              }
+            />
             <Row label="Dirección" value={customer.address ?? "—"} />
-            <Row label="Responsabilidad fiscal" value={customer.fiscal_responsibility ?? "—"} />
+            {/* Los códigos DANE son lo que Siigo exige para emitir: si faltan,
+                la factura falla, así que se muestran aunque sean técnicos. */}
+            <Row
+              label="Códigos DANE"
+              value={
+                customer.state_code && customer.city_code
+                  ? `${customer.state_code} · ${customer.city_code}`
+                  : "⚠ faltan"
+              }
+            />
+            <Row
+              label="Responsabilidad fiscal"
+              value={labelOf(FISCAL_RESPONSIBILITIES, customer.fiscal_responsibility) ?? "—"}
+            />
+            <Row
+              label="Responsable de IVA"
+              value={customer.vat_responsible == null ? "—" : customer.vat_responsible ? "Sí" : "No"}
+            />
             <Row label="Cliente desde" value={formatDate(customer.created_at)} />
           </dl>
+
+          {contactName && (
+            <div className="mt-3 border-t border-line pt-3">
+              <p className="mb-2 text-xs font-medium text-text-soft">Persona de contacto</p>
+              <dl className="grid gap-2 text-sm">
+                <Row label="Nombre" value={contactName} />
+                {customer.contact_phone && (
+                  <Row label="Teléfono" value={customer.contact_phone} />
+                )}
+                {customer.contact_email && <Row label="Correo" value={customer.contact_email} />}
+              </dl>
+            </div>
+          )}
+
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="mb-2 text-xs font-medium text-text-soft">Clasificación comercial</p>
+            <dl className="grid gap-2 text-sm">
+              <Row label="Canal" value={customer.channel ?? "—"} />
+              <Row
+                label="Tipo de negocio"
+                value={labelOf(CUSTOMER_CLASSIFICATIONS, customer.customer_type_classification) ?? "—"}
+              />
+              <Row
+                label="Tipo de compra"
+                value={labelOf(PURCHASE_TYPES, customer.purchase_type) ?? "—"}
+              />
+              {customer.credit_limit != null && (
+                <Row label="Cupo de crédito" value={formatMoney(customer.credit_limit)} />
+              )}
+              {customer.website_social && (
+                <Row label="Web / red social" value={customer.website_social} />
+              )}
+              {customer.birthday && (
+                <Row label="Cumpleaños" value={formatDate(customer.birthday)} />
+              )}
+              {customer.branch_code && (
+                <Row label="Código de sucursal" value={customer.branch_code} />
+              )}
+            </dl>
+          </div>
 
           {/* doc 11 §28: se muestra el estado de Siigo, no el id técnico */}
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">

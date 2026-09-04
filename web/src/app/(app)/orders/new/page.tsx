@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   getCustomerForPicker,
@@ -12,6 +13,7 @@ import { createOrderAction, type OrderItemInput } from "@/lib/actions/orders";
 import { PageHeader } from "@/components/ui";
 import { customerDisplayName, formatMoney } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
+import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, type PriceList } from "@/lib/ui/fiscal";
 
 const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => ({
   value,
@@ -24,7 +26,21 @@ const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]
 // facturar en la Fase 7.
 const RETENTION_RATES = [0, 1, 2, 2.5, 3.5, 4, 6, 7, 11];
 
-type Line = OrderItemInput & { key: string; name: string; code: string; stock: number | null };
+type Line = OrderItemInput & {
+  key: string;
+  name: string;
+  code: string;
+  stock: number | null;
+  // Las tres listas se guardan en la línea para poder re-tarifar sin volver
+  // a consultar el producto cuando la vendedora cambia de lista.
+  prices: Record<PriceList, number | null>;
+};
+
+function priceFor(p: ProductSearchResult, list: PriceList) {
+  if (list === "profesional") return p.price_professional;
+  if (list === "salon") return p.price_salon;
+  return p.price_public;
+}
 
 function lineNet(line: Line) {
   const subtotal = line.quantity * line.unitPrice;
@@ -45,7 +61,11 @@ function NewOrderForm() {
   const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
 
   const [lines, setLines] = useState<Line[]>([]);
+  const [channel, setChannel] = useState<"B2B" | "B2C">("B2B");
+  const [priceList, setPriceList] = useState<PriceList>("salon");
   const [paymentMethod, setPaymentMethod] = useState("contado");
+  const [paymentDetail, setPaymentDetail] = useState("");
+  const [saleOrigin, setSaleOrigin] = useState("");
   const [retentionPercent, setRetentionPercent] = useState(0);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +82,31 @@ function NewOrderForm() {
       cancelled = true;
     };
   }, [preselectedCustomerId]);
+
+  // doc GUIA_B2C: en B2C el precio es el público, no hay retención y solo
+  // se cobra de contado. Cambiar de canal re-tarifa lo que ya esté cargado.
+  function switchChannel(next: "B2B" | "B2C") {
+    setChannel(next);
+    if (next === "B2C") {
+      applyPriceList("publico");
+      setRetentionPercent(0);
+      setPaymentMethod("contado");
+    } else {
+      applyPriceList("salon");
+    }
+  }
+
+  function applyPriceList(list: PriceList) {
+    setPriceList(list);
+    setLines((ls) =>
+      ls.map((l) => {
+        const next = l.prices[list];
+        // Un producto sin precio en esa lista conserva el que ya tenía: es
+        // mejor que ponerlo en cero y facturar gratis.
+        return next === null ? l : { ...l, unitPrice: next };
+      }),
+    );
+  }
 
   function runCustomerSearch(q: string) {
     setCustomerQuery(q);
@@ -94,8 +139,13 @@ function NewOrderForm() {
         name: p.name,
         code: p.code,
         stock: p.stock_cache,
+        prices: {
+          publico: p.price_public,
+          profesional: p.price_professional,
+          salon: p.price_salon,
+        },
         quantity: 1,
-        unitPrice: p.price_public ?? 0,
+        unitPrice: priceFor(p, priceList) ?? p.price_public ?? 0,
         discountPercent: 0,
       },
     ]);
@@ -114,6 +164,9 @@ function NewOrderForm() {
   const netTotal = lines.reduce((sum, l) => sum + lineNet(l), 0);
   const retentionEstimate = netTotal * (retentionPercent / 100);
   const units = lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0);
+  const isCash = paymentMethod === "contado";
+  const availablePaymentMethods =
+    channel === "B2C" ? PAYMENT_METHODS.filter((p) => p.value === "contado") : PAYMENT_METHODS;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -129,18 +182,22 @@ function NewOrderForm() {
     }
 
     startTransition(async () => {
-      const result = await createOrderAction(
-        customer.id,
-        lines.map(({ productId, quantity, unitPrice, discountPercent }) => ({
+      const result = await createOrderAction({
+        customerId: customer.id,
+        items: lines.map(({ productId, quantity, unitPrice, discountPercent }) => ({
           productId,
           quantity,
           unitPrice,
           discountPercent,
         })),
         paymentMethod,
-        retentionPercent,
-        notes || undefined,
-      );
+        retentionPercent: channel === "B2C" ? 0 : retentionPercent,
+        notes: notes || undefined,
+        channel,
+        priceList,
+        paymentMethodDetail: isCash ? paymentDetail || undefined : undefined,
+        saleOrigin: saleOrigin || undefined,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -154,6 +211,51 @@ function NewOrderForm() {
       <PageHeader back={{ href: "/orders", label: "Pedidos" }} title="Nuevo pedido" />
 
       <form onSubmit={handleSubmit} className="grid gap-5">
+        {/* --------------------------------------------------- canal B2B/B2C */}
+        <section className="card card-pad">
+          <fieldset>
+            <legend className="field-label">Tipo de venta</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(["B2B", "B2C"] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => switchChannel(c)}
+                  className={`min-h-[44px] rounded-xl border px-3 text-sm font-medium ${
+                    channel === c
+                      ? "border-primary bg-primary text-white"
+                      : "border-line-strong bg-surface text-text-soft"
+                  }`}
+                >
+                  {c === "B2B" ? "B2B · Salón o profesional" : "B2C · Consumidor final"}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="mt-3">
+            <label htmlFor="price-list" className="field-label">
+              Lista de precio
+            </label>
+            <select
+              id="price-list"
+              value={priceList}
+              onChange={(e) => applyPriceList(e.target.value as PriceList)}
+              className="select"
+            >
+              {PRICE_LISTS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-text-muted">
+              Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Si
+              editaste un precio a mano, se pierde ese cambio.
+            </p>
+          </div>
+        </section>
+
         {/* ------------------------------------------------------- cliente */}
         <section className="card card-pad">
           <label className="field-label">Cliente</label>
@@ -202,6 +304,15 @@ function NewOrderForm() {
                   ))}
                 </div>
               )}
+              {/* Punto 2 de la revisión: no hay cliente ficticio de mostrador
+                  — un B2C se registra como persona natural igual que los demás. */}
+              <p className="mt-2 text-xs text-text-muted">
+                ¿No está?{" "}
+                <Link href="/customers/new" className="underline">
+                  Crear cliente
+                </Link>
+                .
+              </p>
             </div>
           )}
         </section>
@@ -233,7 +344,7 @@ function NewOrderForm() {
                       </span>
                     </span>
                     <span className="font-medium whitespace-nowrap">
-                      {formatMoney(p.price_public)}
+                      {formatMoney(priceFor(p, priceList) ?? p.price_public)}
                     </span>
                   </button>
                 ))}
@@ -333,26 +444,76 @@ function NewOrderForm() {
                 onChange={(e) => setPaymentMethod(e.target.value)}
                 className="select"
               >
-                {PAYMENT_METHODS.map((p) => (
+                {availablePaymentMethods.map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
                   </option>
                 ))}
               </select>
+              {channel === "B2C" && (
+                <p className="mt-1 text-xs text-text-muted">
+                  En B2C solo se cobra de contado.
+                </p>
+              )}
             </div>
+
+            {/* El medio de pago solo tiene sentido si ya entró la plata: a
+                crédito todavía no hay nada que registrar. */}
+            {isCash && (
+              <div>
+                <label htmlFor="payment-detail" className="field-label">
+                  Medio de pago
+                </label>
+                <select
+                  id="payment-detail"
+                  value={paymentDetail}
+                  onChange={(e) => setPaymentDetail(e.target.value)}
+                  className="select"
+                >
+                  <option value="">Sin especificar</option>
+                  {PAYMENT_DETAILS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {channel === "B2B" && (
+              <div>
+                <label htmlFor="retention" className="field-label">
+                  Retención
+                </label>
+                <select
+                  id="retention"
+                  value={retentionPercent}
+                  onChange={(e) => setRetentionPercent(Number(e.target.value))}
+                  className="select"
+                >
+                  {RETENTION_RATES.map((r) => (
+                    <option key={r} value={r}>
+                      {r === 0 ? "Sin retención" : `${r}%`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div>
-              <label htmlFor="retention" className="field-label">
-                Retención
+              <label htmlFor="sale-origin" className="field-label">
+                Origen de la venta
               </label>
               <select
-                id="retention"
-                value={retentionPercent}
-                onChange={(e) => setRetentionPercent(Number(e.target.value))}
+                id="sale-origin"
+                value={saleOrigin}
+                onChange={(e) => setSaleOrigin(e.target.value)}
                 className="select"
               >
-                {RETENTION_RATES.map((r) => (
-                  <option key={r} value={r}>
-                    {r === 0 ? "Sin retención" : `${r}%`}
+                <option value="">Sin especificar</option>
+                {SALE_ORIGINS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
                   </option>
                 ))}
               </select>
@@ -378,7 +539,7 @@ function NewOrderForm() {
                 <dt className="text-text-soft">Neto estimado (antes de IVA)</dt>
                 <dd>{formatMoney(netTotal)}</dd>
               </div>
-              {retentionPercent > 0 && (
+              {retentionPercent > 0 && channel === "B2B" && (
                 <div className="flex justify-between">
                   <dt className="text-text-soft">Retención estimada</dt>
                   <dd>-{formatMoney(retentionEstimate)}</dd>

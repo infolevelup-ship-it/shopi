@@ -19,9 +19,19 @@ export function formatNumber(value: number | string | null | undefined) {
   });
 }
 
+// Las columnas `date` de Postgres llegan como "1990-05-14", y el motor de
+// JavaScript las interpreta como medianoche UTC: en Colombia (UTC-5) eso se
+// renderiza como el día anterior. Un cumpleaños o una fecha de vencimiento
+// corrida un día es un error silencioso, así que las fechas sin hora se
+// arman como fecha local.
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
 export function formatDate(iso: string | null | undefined) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("es-CO", {
+  const date = DATE_ONLY.test(iso)
+    ? new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)))
+    : new Date(iso);
+  return date.toLocaleDateString("es-CO", {
     day: "2-digit",
     month: "short",
     year: "numeric",

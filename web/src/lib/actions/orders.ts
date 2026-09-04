@@ -82,26 +82,43 @@ export type CreateOrderResult =
   | { ok: true; orderId: string }
   | { ok: false; error: string };
 
-export async function createOrderAction(
-  customerId: string,
-  items: OrderItemInput[],
-  paymentMethod: string,
-  retentionPercent: number,
-  notes?: string,
-): Promise<CreateOrderResult> {
+export type CreateOrderInput = {
+  customerId: string;
+  items: OrderItemInput[];
+  paymentMethod: string;
+  retentionPercent: number;
+  notes?: string;
+  /** B2B o B2C — decide el pipeline en GHL (doc GUIA_B2C). */
+  channel?: string;
+  /** Lista de precio con la que se armó el pedido. */
+  priceList?: string;
+  /** Por dónde entró la plata; solo aplica a pagos de contado. */
+  paymentMethodDetail?: string;
+  /** De dónde salió la venta. Solo reportes, nunca afecta la factura. */
+  saleOrigin?: string;
+  /** Documento a emitir en Siigo. */
+  documentType?: string;
+};
+
+export async function createOrderAction(input: CreateOrderInput): Promise<CreateOrderResult> {
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("create_order", {
-    p_customer_id: customerId,
-    p_items: items.map((i) => ({
+    p_customer_id: input.customerId,
+    p_items: input.items.map((i) => ({
       product_id: i.productId,
       quantity: i.quantity,
       unit_price: i.unitPrice,
       discount_percent: i.discountPercent ?? 0,
     })),
-    p_payment_method: paymentMethod || undefined,
-    p_retention_percent: retentionPercent,
-    p_notes: notes || undefined,
+    p_payment_method: input.paymentMethod || undefined,
+    p_retention_percent: input.retentionPercent,
+    p_notes: input.notes || undefined,
+    p_channel: input.channel || undefined,
+    p_price_list: input.priceList || undefined,
+    p_payment_method_detail: input.paymentMethodDetail || undefined,
+    p_sale_origin: input.saleOrigin || undefined,
+    p_document_type: input.documentType || undefined,
   });
 
   if (error) {

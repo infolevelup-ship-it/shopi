@@ -11,6 +11,17 @@ import { FiscalCard } from "./fiscal-card";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatMoney } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
+import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, labelOf } from "@/lib/ui/fiscal";
+
+function Condition({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between gap-3 sm:justify-start">
+      <dt className="text-text-soft">{label}:</dt>
+      <dd className="text-text">{value}</dd>
+    </div>
+  );
+}
 
 export default async function OrderDetailPage({
   params,
@@ -23,7 +34,7 @@ export default async function OrderDetailPage({
   // doc 11 §64: bodega necesita la ficha fiscal del cliente sin salir del
   // pedido — por eso el select trae también los campos de facturación.
   const ORDER_SELECT =
-    "id, order_number, status, payment_method, retention_percent, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, return_reason, seller_id, ghl_sync_status, ghl_sync_error, customer:customers(id, legal_name, first_name, last_name, commercial_name, document_type, document_number, email, phone, address, city, fiscal_responsibility, siigo_customer_id), seller:users!orders_seller_id_fkey(name)";
+    "id, order_number, status, channel, price_list, payment_method, payment_method_detail, sale_origin, retention_percent, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, return_reason, seller_id, ghl_sync_status, ghl_sync_error, customer:customers(id, legal_name, first_name, last_name, commercial_name, document_type, document_number, email, phone, address, city, fiscal_responsibility, siigo_customer_id), seller:users!orders_seller_id_fkey(name)";
 
   const [{ data: initialOrder }, profile] = await Promise.all([
     supabase.from("orders").select(ORDER_SELECT).eq("id", id).maybeSingle(),
@@ -259,14 +270,32 @@ export default async function OrderDetailPage({
             </div>
           </dl>
 
-          {order.payment_method && (
-            <p className="mt-3 text-sm text-text-soft">
-              Forma de pago:{" "}
-              <span className="text-text">
-                {PAYMENT_METHOD_LABEL[order.payment_method] ?? order.payment_method}
-              </span>
-            </p>
-          )}
+          {/* Condiciones con las que se armó el pedido: bodega las necesita
+              para cuadrar el recibo, y facturación para emitir bien. */}
+          <dl className="mt-3 grid gap-1 border-t border-line pt-3 text-sm sm:grid-cols-2">
+            {order.payment_method && (
+              <Condition
+                label="Forma de pago"
+                value={PAYMENT_METHOD_LABEL[order.payment_method] ?? order.payment_method}
+              />
+            )}
+            {order.payment_method_detail && (
+              <Condition
+                label="Medio de pago"
+                value={labelOf(PAYMENT_DETAILS, order.payment_method_detail)}
+              />
+            )}
+            {order.price_list && (
+              <Condition
+                label="Lista de precio"
+                value={PRICE_LISTS.find((p) => p.value === order.price_list)?.label ?? order.price_list}
+              />
+            )}
+            {order.channel && <Condition label="Tipo de venta" value={order.channel} />}
+            {order.sale_origin && (
+              <Condition label="Origen de la venta" value={labelOf(SALE_ORIGINS, order.sale_origin)} />
+            )}
+          </dl>
 
           {order.notes && (
             <p className="mt-3 border-t border-line pt-3 text-sm text-text-soft">{order.notes}</p>

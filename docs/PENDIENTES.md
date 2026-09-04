@@ -629,6 +629,66 @@ y borrable: los correos terminan en `@productoswow.test`, las facturas llevan
 de prueba se pueden identificar por `orders.notes like 'SEED:%'` y por las
 facturas `FV-PRUEBA-…`.
 
+## Fase A-C (campos fiscales del formulario legado) — construido y probado
+
+Traer al producto los campos y pestañas que el formulario legado de "WOW · Pedidos B2B" capturaba
+y que aquí no existían en pantalla. Migraciones `0015`, `0016`, `0017`; interfaz en esta tanda.
+
+Construido y verificado:
+
+- [x] Catálogo DANE (`dane_locations`, ~140 ciudades) con selectores departamento → ciudad. Sin
+      `state_code`/`city_code` Siigo no emite la factura, y antes no había forma de llenarlos.
+- [x] Ficha fiscal completa del cliente en 4 secciones: identificación (con DV), ubicación DANE,
+      contacto (incluida la persona de contacto del salón), y clasificación fiscal/comercial.
+- [x] Dígito de verificación del NIT calculado con el algoritmo DIAN, editable a mano (decisión
+      del usuario: "automático con opción de cambiarlo manual"). Verificado contra tres NIT reales
+      conocidos (900123456-8, 830053105-3, 811021438-4).
+- [x] Pedido: toggle B2B/B2C, lista de precio que re-tarifa las líneas ya cargadas, medio de pago
+      (solo visible en contado, que es cuando ya entró la plata), origen de la venta. En B2C el
+      precio pasa a público, la retención se oculta y solo queda contado (doc `GUIA_B2C`).
+- [x] Cotización: misma lista de precio, retención con las tasas verificadas contra Siigo, forma
+      de pago propuesta y "válida hasta" (el parámetro `p_valid_until` existía desde la Fase 4 y
+      ninguna pantalla lo llenaba).
+- [x] Todo lo capturado se muestra: ficha del cliente con códigos DANE, contacto y clasificación;
+      detalle de pedido y de cotización con las condiciones comerciales.
+- [x] Aritmética re-verificada con sesión JWT real de vendedora: pedido y cotización sobre el mismo
+      caso (4 × 100.000, 10% desc., IVA 19%, retención 2.5%) dan idéntico —
+      400.000 − 40.000 = 360.000 neto, IVA 68.400, retención 9.000, total **419.400**, el mismo
+      número verificado en la Fase 5.
+
+Bug real encontrado y corregido de paso:
+
+- `formatDate()` mostraba **un día menos** en toda columna `date` (`birthday`, `valid_until`).
+  Postgres las entrega como `"1990-05-14"` y JavaScript las lee como medianoche UTC; en Colombia
+  (UTC-5) eso se renderiza como el 13. Ahora las fechas sin hora se arman como fecha local. Las
+  marcas de tiempo (`timestamptz`) no cambian.
+
+Decidido a propósito, no es un olvido:
+
+- [ ] `orders.document_type` se dejó **sin selector**. El "tipo de documento" del formulario legado
+      elegía entre factura y cotización, y eso aquí ya lo resuelve que la cotización sea una entidad
+      propia (decisión del usuario, punto 1). La columna y el parámetro existen; qué valores admite
+      de verdad depende del catálogo de documentos de Siigo, que sigue sin confirmarse.
+- [ ] No hay cliente ficticio de mostrador (decisión del usuario, punto 2): un B2C se registra como
+      persona natural con la misma lógica que cualquier otro cliente.
+- [ ] Cambiar de lista de precio pisa los precios editados a mano. Está avisado en pantalla; si
+      molesta en uso real, la alternativa es respetar las líneas tocadas a mano y solo re-tarifar
+      las demás.
+- [ ] Las listas de `src/lib/ui/fiscal.ts` (responsabilidad fiscal, tipo de negocio, medios de pago,
+      orígenes de venta) son las que se dedujeron del formulario legado y del catálogo DIAN.
+      Conviene confirmarlas con Productos WOW antes de cargar clientes reales — después, cambiar un
+      valor implica migrar los que ya se guardaron.
+
+Sigue pendiente del plan acordado (fases D a G, en ese orden):
+
+- [ ] **D** — comprobantes de pago: bucket privado en Supabase Storage con RLS, hasta 3 archivos,
+      siempre opcional (decisión del usuario, punto 3), filas en la tabla `attachments` que ya
+      existe, visibles para bodega.
+- [ ] **E** — impresión/PDF: rutas `/orders/[id]/imprimir` y `/quotes/[id]/imprimir`, con el botón
+      claramente separado de "Facturar".
+- [ ] **F** — visitas a prospectos sobre la tabla `prospects` que ya existe.
+- [ ] **G** — editar el pedido mientras está en `DRAFT` o `RETURNED_TO_SELLER`.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in

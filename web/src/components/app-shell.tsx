@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -40,11 +40,15 @@ export function AppShell({
   const [quickOpen, setQuickOpen] = useState(false);
 
   // Cerrar los paneles al navegar — si no, quedan abiertos sobre la pantalla
-  // nueva después de tocar un enlace.
-  useEffect(() => {
+  // nueva después de tocar un enlace. Se ajusta durante el render y no en un
+  // efecto: así React lo resuelve en la misma pasada, sin pintar primero la
+  // pantalla nueva con el panel todavía abierto.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname);
     setDrawerOpen(false);
     setQuickOpen(false);
-  }, [pathname]);
+  }
 
   const groups = visibleGroups(user.role);
   const mobileItems = mobileNavItems(user.role);
