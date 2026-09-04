@@ -2,6 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
+import type { Database } from "@/lib/supabase/database.types";
+
+type OrderStatus = Database["public"]["Enums"]["order_status"];
 
 // Fase 10 (doc 01 §30, doc 10 §13): "¿qué tengo que hacer hoy?" — el panel
 // diario de la vendedora. Las "Prioridades" son categorías explicables, no
@@ -45,6 +48,57 @@ export type SellerDashboard = {
   salesThisMonth: number;
   priorities: PriorityItem[];
 };
+
+// doc 11 §36: la primera pantalla de bodega responde "¿qué pedido debo
+// procesar ahora?" con conteos por estado, no con un menú. Cada número es un
+// filtro real sobre `orders`, no un estimado.
+export type WarehouseDashboard = {
+  userName: string;
+  pendingReview: number;
+  inReview: number;
+  approvedForInvoice: number;
+  invoicing: number;
+  invoiced: number;
+  returned: number;
+  oldestPendingAt: string | null;
+};
+
+export async function getWarehouseDashboard(): Promise<WarehouseDashboard | null> {
+  const profile = await getCurrentProfile();
+  if (!profile) return null;
+
+  const supabase = await createClient();
+  const countOf = (statuses: OrderStatus[]) =>
+    supabase.from("orders").select("id", { count: "exact", head: true }).in("status", statuses);
+
+  const [pending, inReview, approved, invoicing, invoiced, returned, oldest] = await Promise.all([
+    countOf(["SUBMITTED", "PENDING_REVIEW"]),
+    countOf(["IN_REVIEW"]),
+    countOf(["APPROVED_FOR_INVOICE"]),
+    countOf(["INVOICING"]),
+    countOf(["INVOICED"]),
+    countOf(["RETURNED_TO_SELLER"]),
+    supabase
+      .from("orders")
+      .select("submitted_at")
+      .in("status", ["SUBMITTED", "PENDING_REVIEW", "IN_REVIEW"])
+      .not("submitted_at", "is", null)
+      .order("submitted_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  return {
+    userName: profile.name,
+    pendingReview: pending.count ?? 0,
+    inReview: inReview.count ?? 0,
+    approvedForInvoice: approved.count ?? 0,
+    invoicing: invoicing.count ?? 0,
+    invoiced: invoiced.count ?? 0,
+    returned: returned.count ?? 0,
+    oldestPendingAt: oldest.data?.submitted_at ?? null,
+  };
+}
 
 export async function getSellerDashboard(): Promise<SellerDashboard | null> {
   const profile = await getCurrentProfile();

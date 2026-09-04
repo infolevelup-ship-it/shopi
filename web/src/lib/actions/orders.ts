@@ -2,6 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { syncOrderToGhlAction } from "@/lib/actions/ghl";
+import type { Database } from "@/lib/supabase/database.types";
+
+type OrderStatus = Database["public"]["Enums"]["order_status"];
 
 export type OrderSearchResult = {
   id: string;
@@ -27,7 +30,10 @@ function customerDisplayName(c: {
   );
 }
 
-export async function searchOrders(query: string): Promise<OrderSearchResult[]> {
+export async function searchOrders(
+  query: string,
+  statuses?: OrderStatus[],
+): Promise<OrderSearchResult[]> {
   const supabase = await createClient();
   let request = supabase
     .from("orders")
@@ -40,6 +46,9 @@ export async function searchOrders(query: string): Promise<OrderSearchResult[]> 
   const q = query.trim();
   if (q) {
     request = request.ilike("order_number", `%${q}%`);
+  }
+  if (statuses && statuses.length > 0) {
+    request = request.in("status", statuses);
   }
 
   const { data, error } = await request;

@@ -518,6 +518,117 @@ Lo que falta, y por qué no se construyó ahora:
 - [ ] `records_source`/`records_created`/etc. de `migration_batches` los llena quien corra el ETL
       real — hoy no hay ningún proceso que los escriba.
 
+## Fase UI (doc 11) — rediseño aplicado a lo que ya existía
+
+El doc 11 (`docs/11_UI_UX_CSS_RESPONSIVE.md`) mezcla dos cosas muy distintas:
+rediseño de pantallas que ya existen, y funcionalidad nueva dibujada como si
+fuera diseño. Se aplicó **solo la primera**; la segunda queda listada abajo
+como lo que realmente es: trabajo de backend + UI, no de CSS.
+
+Lo construido:
+
+- [x] Design tokens del doc 11 §6 en `web/src/app/globals.css` como `@theme` de
+      Tailwind v4 + clases de componente (`.btn`, `.card`, `.input`, `.badge`,
+      `.table`). Decisión deliberada: **no** se copió el CSS suelto del
+      documento — habrían quedado dos sistemas de estilos compitiendo con las
+      utilidades de Tailwind que ya usaba toda la app (doc 11 §104).
+- [x] **Bug real corregido de paso**: `globals.css` tenía un
+      `@media (prefers-color-scheme: dark)` que pintaba el fondo casi negro
+      mientras todos los componentes seguían diseñados en claro — por eso la
+      app se veía con fondo negro y tarjetas blancas en cualquier equipo con
+      el sistema en modo oscuro. Se eliminó; el doc 11 no pide modo oscuro.
+- [x] AppShell (doc 11 §3/§4/§11/§14): sidebar fijo en desktop, drawer +
+      barra inferior de 5 destinos + botón "+ Nuevo" en móvil, navegación
+      filtrada por rol (`web/src/lib/ui/nav.ts`).
+- [x] Grupo de rutas `(app)` con layout propio: el shell se monta una sola vez
+      y la validación de "cuenta sin perfil / desactivada" pasó de vivir solo
+      en la home a aplicar en todas las pantallas. Las URLs no cambiaron.
+- [x] `StatusBadge` como fuente única de verdad de los 13 estados de pedido +
+      cotización/cliente/factura (doc 11 §94/§95), con su significado y quién
+      es el responsable. Antes cada pantalla repetía su propio mapa de estados
+      con textos y colores distintos.
+- [x] Home por rol (doc 11 §2): vendedora ve su día, bodega ve su cola con
+      conteos (§36), supervisor/admin ven negocio + operación (§48).
+- [x] Listas con tabla en desktop y tarjetas en móvil (§23/§24/§53), nunca
+      scroll horizontal: clientes, pedidos, cotizaciones, productos, cola de
+      bodega.
+- [x] Ficha del cliente como expediente (§25/§99): métricas, ciclo de compra,
+      contacto/fiscal, pedidos, cotizaciones, seguimientos y actividad.
+- [x] Ficha fiscal dentro del pedido para bodega (§64) con indicador de qué
+      falta antes de poder facturar.
+- [x] Confirmación de facturación con los datos del pedido y la advertencia de
+      documento fiscal (§43); resultado incierto como estado propio que dice
+      "no vuelvas a facturar" (§44/§87).
+- [x] Acciones contextuales desde el cliente (§49): "Crear pedido" / "Crear
+      cotización" llegan con el cliente ya seleccionado (`?cliente=<id>`).
+- [x] Aviso al operar sobre un cliente asignado a otra vendedora (§98).
+- [x] Búsqueda en la URL (`?q=`) en vez de estado local: resultados
+      compartibles y el botón atrás funciona.
+- [x] Formato compartido (`web/src/lib/ui/format.ts`) — antes `formatMoney`
+      estaba copiado en 14 archivos.
+
+Verificación: `npm run build` limpio, y las pantallas se revisaron en
+navegador real a 1440px y 390px con una ruta de previsualización temporal
+(ya eliminada). **No se pudo verificar la app autenticada desde este entorno**:
+el navegador del sandbox no tiene salida hacia `*.supabase.co` (mismo bloqueo
+de red que Siigo/GHL), así que el login real solo se puede probar en el
+despliegue de Vercel.
+
+Del doc 11, deliberadamente NO construido (es funcionalidad nueva, no rediseño):
+
+- [ ] Prospectos (§2.1, §3, §21, §22) — la tabla existe en BD desde la Fase 1
+      pero no hay ni una línea de código de aplicación. El menú no lo muestra:
+      un enlace a una pantalla inexistente es peor que un menú más corto.
+- [ ] Despachos (§3, §36, §85) — los estados `READY_FOR_DISPATCH`/`DISPATCHED`/
+      `DELIVERED` existen en el enum, pero no hay función ni pantalla que los
+      mueva. El flujo construido termina en `INVOICED`.
+- [ ] Comprobantes de pago con foto (§80/§81) — necesita bucket de Supabase
+      Storage con sus políticas; ya estaba anotado como pendiente desde Fase 5.
+- [ ] Impresión / PDF del pedido (§41) — nunca construido; el checklist de
+      bodega tiene el punto "recibo impreso" pero no genera nada.
+- [ ] Búsqueda global del topbar (§22) — requiere una consulta nueva sobre 4
+      entidades.
+- [ ] Notificaciones (🔔 del topbar, §13) — ya anotado desde Fase 10/11.
+- [ ] Editar cliente/pedido/cotización (§49 "[Editar]") — ya anotado en las
+      fases 2/4/5; hoy solo se crea y se cambia de estado.
+- [ ] Pantallas de administración/configuración y centro de soporte (§76/§77).
+- [ ] Métricas de UX (§90) — **antes de construirlo hay que resolver la
+      tensión con §70** ("no convertir la plataforma en vigilancia"): el mismo
+      documento pide medir tiempos por usuaria y a la vez advierte que los KPI
+      no sean herramienta de castigo. Decidir si se miden agregados por
+      pantalla (anónimos) o por vendedora, y quién los ve.
+- [ ] Borradores locales / estado offline (§57/§58/§59).
+
+Riesgo de rendimiento destapado por el rediseño (no es de UI):
+
+- [ ] La búsqueda de clientes usa `ilike '%texto%'` sobre nombre, que **no usa
+      índice**. Con 11 clientes de prueba vuela; con los 12.000–26.000 de la
+      migración se va a arrastrar. Necesita un índice trigram (`pg_trgm`)
+      antes de cargar el universo real.
+
+## Datos de prueba cargados (no son datos reales)
+
+Para poder ver el flujo completo funcionando antes de conectar Siigo/GHL se
+cargaron datos ficticios en el proyecto real de Supabase. Todo es identificable
+y borrable: los correos terminan en `@productoswow.test`, las facturas llevan
+`siigo_invoice_id = 'SEED-…'` y número `FV-PRUEBA-…`.
+
+- 4 usuarios de prueba (contraseña `WowPrueba2026*`):
+  `karina.vendedora@` y `laura.vendedora@` (SELLER), `bodega@` (WAREHOUSE),
+  `supervisor@` (SUPERVISOR), todos `@productoswow.test`.
+- 15 productos Olaplex con inventario variado (agotados, bajos y normales).
+- 11 clientes repartidos entre las dos vendedoras.
+- 13 pedidos cubriendo el flujo completo: borrador, en cola de bodega,
+  devuelto a vendedora, aprobado para facturar y facturados con fechas
+  espaciadas (para que el ciclo de compra y "cliente fuera de ciclo" tengan
+  datos reales que calcular).
+- 5 cotizaciones (enviadas, una aceptada, una perdida con motivo).
+- 4 seguimientos, tres de ellos vencidos.
+
+**Antes de operar de verdad hay que borrar todo esto.** Los pedidos y facturas
+de prueba se pueden identificar por `orders.notes like 'SEED:%'` y por las
+facturas `FV-PRUEBA-…`.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in

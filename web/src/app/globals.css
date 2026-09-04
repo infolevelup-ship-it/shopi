@@ -1,26 +1,400 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   Design tokens — doc 11 §6.
+   Fuente única de verdad del color/espaciado. Las pantallas usan utilidades de
+   Tailwind para layout y las clases de componente de abajo para los elementos
+   repetidos (botón, tarjeta, input, badge). No introducir colores sueltos en
+   una pantalla: si hace falta uno nuevo, se agrega aquí.
+
+   Deliberadamente sin modo oscuro (doc 11 no lo pide): antes existía un
+   @media(prefers-color-scheme: dark) que pintaba el fondo casi negro mientras
+   todos los componentes seguían diseñados en claro — se veía roto en cualquier
+   equipo con el sistema en oscuro.
+   ============================================================================ */
+
+@theme {
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f9fafb;
+
+  --color-text: #17202a;
+  --color-text-soft: #667085;
+  --color-text-muted: #98a2b3;
+
+  --color-line: #e4e7ec;
+  --color-line-strong: #d0d5dd;
+
+  --color-primary: #171717;
+  --color-primary-hover: #2b2b2b;
+
+  --color-success: #12b76a;
+  --color-success-bg: #ecfdf3;
+  --color-warning: #f79009;
+  --color-warning-bg: #fffaeb;
+  --color-danger: #f04438;
+  --color-danger-bg: #fef3f2;
+  --color-info: #1570ef;
+  --color-info-bg: #eff8ff;
+  --color-purple: #7f56d9;
+  --color-purple-bg: #f9f5ff;
+
+  --color-sidebar: #101828;
+  --color-sidebar-hover: #1d2939;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --sidebar-width: 240px;
+  --topbar-height: 64px;
+  --content-max: 1440px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ---------------------------------------------------------------- base */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-width: 320px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+/* doc 11 §61: foco siempre visible, no se elimina el outline */
+:focus-visible {
+  outline: 3px solid rgba(21, 112, 239, 0.35);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ contenedor */
+
+.main-content {
+  min-width: 0;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 767px) {
+  .main-content {
+    padding: 16px;
+    /* espacio para la barra de navegación inferior fija */
+    padding-bottom: 88px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .main-content {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+/* --------------------------------------------------------------- botones */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  border-color: var(--color-line-strong);
+  color: var(--color-text);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-soft);
+}
+
+.btn-tertiary {
+  background: transparent;
+  color: var(--color-text-soft);
+}
+.btn-tertiary:hover:not(:disabled) {
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+}
+
+.btn-success {
+  background: var(--color-success);
+  color: #fff;
+}
+.btn-success:hover:not(:disabled) {
+  background: #0e9f5c;
+}
+
+.btn-danger {
+  background: var(--color-surface);
+  border-color: #fda29b;
+  color: var(--color-danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+/* doc 11 §15/§16: en móvil el área táctil crece y la acción ocupa el ancho */
+@media (max-width: 767px) {
+  .btn {
+    min-height: 46px;
+    font-size: 15px;
+  }
+  .btn-block-mobile {
+    width: 100%;
+  }
+}
+
+/* ---------------------------------------------------------------- inputs */
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  outline: none;
+}
+
+.textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 3px rgba(21, 112, 239, 0.12);
+}
+
+.input:disabled,
+.select:disabled {
+  background: var(--color-surface-soft);
+  color: var(--color-text-soft);
+}
+
+/* doc 11 §17: 16px en móvil evita el zoom automático del navegador al enfocar */
+@media (max-width: 767px) {
+  .input,
+  .select,
+  .textarea {
+    font-size: 16px;
+  }
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-soft);
+}
+
+/* --------------------------------------------------------------- tarjetas */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-pad {
+  padding: 20px;
+}
+
+@media (max-width: 767px) {
+  .card-pad {
+    padding: 16px;
+  }
+}
+
+/* ---------------------------------------------------------------- badges */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* doc 11 §35/§74: el color nunca es la única señal — el badge siempre lleva
+   texto, y el punto de color es un refuerzo, no el mensaje. */
+.badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+.badge-neutral {
+  color: var(--color-text-soft);
+  background: var(--color-surface-soft);
+}
+.badge-info {
+  color: var(--color-info);
+  background: var(--color-info-bg);
+}
+.badge-success {
+  color: #05834b;
+  background: var(--color-success-bg);
+}
+.badge-warning {
+  color: #b54708;
+  background: var(--color-warning-bg);
+}
+.badge-danger {
+  color: #b42318;
+  background: var(--color-danger-bg);
+}
+.badge-purple {
+  color: var(--color-purple);
+  background: var(--color-purple-bg);
+}
+
+/* ----------------------------------------------------------------- tablas */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-soft);
+  border-bottom: 1px solid var(--color-line);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--color-line);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover {
+  background: var(--color-surface-soft);
+}
+
+/* doc 11 §53: en móvil no se hace scroll horizontal de una tabla — se cambia
+   por una lista de tarjetas. Las dos versiones se renderizan y CSS decide. */
+.desktop-only {
+  display: none;
+}
+.mobile-only {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .desktop-only {
+    display: block;
+  }
+  .mobile-only {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------- skeletons */
+
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f2f4f7 25%, #eaecf0 37%, #f2f4f7 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* ------------------------------------------------------- barras fijas móvil */
+
+.safe-bottom {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
 }

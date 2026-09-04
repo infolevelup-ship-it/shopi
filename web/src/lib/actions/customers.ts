@@ -64,6 +64,107 @@ export async function searchCustomers(query: string): Promise<CustomerSearchResu
   }));
 }
 
+// Para llegar a "crear pedido" desde la ficha del cliente con el cliente ya
+// puesto (doc 11 §49/§83: no hacerla buscar de nuevo lo que ya tenía en
+// pantalla).
+export async function getCustomerForPicker(id: string): Promise<CustomerSearchResult | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("customers")
+    .select(
+      "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, phone, status, responsible_user_id, responsible:users!customers_responsible_user_id_fkey(name)",
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!data) return null;
+  return {
+    id: data.id,
+    customer_type: data.customer_type,
+    document_type: data.document_type,
+    document_number: data.document_number,
+    legal_name: data.legal_name,
+    first_name: data.first_name,
+    last_name: data.last_name,
+    commercial_name: data.commercial_name,
+    phone: data.phone,
+    status: data.status,
+    responsible_user_id: data.responsible_user_id,
+    responsible_name: Array.isArray(data.responsible)
+      ? (data.responsible[0]?.name ?? null)
+      : ((data.responsible as { name: string } | null)?.name ?? null),
+  };
+}
+
+export type CustomerListRow = CustomerSearchResult & {
+  lastOrderAt: string | null;
+  averageTicket: number | null;
+  isAtRisk: boolean;
+  daysSinceLastOrder: number | null;
+};
+
+// doc 11 §23: la pantalla de clientes es una lista real con contexto
+// comercial (última compra, ticket, riesgo), no una caja de búsqueda vacía
+// que no muestra nada hasta que alguien escribe. Sin término de búsqueda
+// devuelve los más recientes.
+export async function listCustomers(query: string): Promise<CustomerListRow[]> {
+  const base = query.trim() ? await searchCustomers(query) : await recentCustomers();
+  if (base.length === 0) return [];
+
+  const supabase = await createClient();
+  const { data: metrics } = await supabase
+    .from("customer_metrics")
+    .select("customer_id, last_order_at, average_ticket, is_at_risk, days_since_last_order")
+    .in(
+      "customer_id",
+      base.map((c) => c.id),
+    );
+
+  const byId = new Map((metrics ?? []).map((m) => [m.customer_id, m]));
+
+  return base.map((c) => {
+    const m = byId.get(c.id);
+    return {
+      ...c,
+      lastOrderAt: m?.last_order_at ?? null,
+      averageTicket: m?.average_ticket != null ? Number(m.average_ticket) : null,
+      isAtRisk: m?.is_at_risk ?? false,
+      daysSinceLastOrder: m?.days_since_last_order != null ? Number(m.days_since_last_order) : null,
+    };
+  });
+}
+
+async function recentCustomers(): Promise<CustomerSearchResult[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select(
+      "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, phone, status, responsible_user_id, responsible:users!customers_responsible_user_id_fkey(name)",
+    )
+    .is("merged_into_customer_id", null)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error(`No se pudieron cargar clientes: ${error.message}`);
+
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    customer_type: c.customer_type,
+    document_type: c.document_type,
+    document_number: c.document_number,
+    legal_name: c.legal_name,
+    first_name: c.first_name,
+    last_name: c.last_name,
+    commercial_name: c.commercial_name,
+    phone: c.phone,
+    status: c.status,
+    responsible_user_id: c.responsible_user_id,
+    responsible_name: Array.isArray(c.responsible)
+      ? (c.responsible[0]?.name ?? null)
+      : ((c.responsible as { name: string } | null)?.name ?? null),
+  }));
+}
+
 export type DuplicateCheckResult = {
   exactMatch: { id: string; display_name: string } | null;
   phoneMatches: { id: string; display_name: string; phone: string }[];
