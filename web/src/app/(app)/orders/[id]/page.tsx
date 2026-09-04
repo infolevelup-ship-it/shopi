@@ -8,10 +8,12 @@ import { OrderStockSyncButton } from "./order-stock-sync-button";
 import { InvoicePanel } from "./invoice-panel";
 import { GhlSyncStatus } from "./ghl-sync-status";
 import { FiscalCard } from "./fiscal-card";
+import { ReceiptsPanel } from "./receipts-panel";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatMoney } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, labelOf } from "@/lib/ui/fiscal";
+import { listOrderReceipts } from "@/lib/actions/receipts";
 
 function Condition({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
@@ -85,6 +87,23 @@ export default async function OrderDetailPage({
   // fuera por defecto (doc 05 §6 lo marca "según política" sin definirla).
   const canInvoice = !!profile && (profile.role === "WAREHOUSE" || profile.role === "ADMIN");
   const isAdmin = profile?.role === "ADMIN";
+
+  // Comprobantes (doc 01 §17, doc 11 §80). Subir: cualquiera que pueda ver el
+  // pedido mientras no esté cancelado ni facturado — con frecuencia el
+  // comprobante llega después de que la vendedora envió el pedido, y es bodega
+  // quien lo adjunta al revisarlo. Borrar: solo mientras el pedido sigue
+  // siendo editable por su vendedora, o supervisión; un comprobante ya
+  // revisado es la prueba de que el pago entró. Estas dos condiciones son las
+  // mismas que aplica la base de datos.
+  const receipts = await listOrderReceipts(order.id);
+  const canUploadReceipts =
+    !!profile && order.status !== "CANCELLED" && order.status !== "INVOICED";
+  const canDeleteReceipts =
+    !!profile &&
+    (profile.role === "SUPERVISOR" ||
+      profile.role === "ADMIN" ||
+      (profile.id === order.seller_id &&
+        (order.status === "DRAFT" || order.status === "RETURNED_TO_SELLER")));
 
   let isUncertain = false;
   let uncertainMessage: string | null = null;
@@ -301,6 +320,13 @@ export default async function OrderDetailPage({
             <p className="mt-3 border-t border-line pt-3 text-sm text-text-soft">{order.notes}</p>
           )}
         </section>
+
+        <ReceiptsPanel
+          orderId={order.id}
+          receipts={receipts}
+          canUpload={canUploadReceipts}
+          canDelete={canDeleteReceipts}
+        />
 
         {/* doc 11 §64: ficha fiscal visible para quien revisa/factura */}
         {isReviewer && customer && <FiscalCard customer={customer} />}

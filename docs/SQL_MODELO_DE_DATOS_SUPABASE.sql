@@ -104,6 +104,25 @@ create table users (
 -- 3. CUSTOMERS  (doc 02 §4)
 -- ============================================================================
 
+-- ============================================================================
+-- CATÁLOGO DANE  (migración 0015)
+-- Códigos oficiales de departamento y ciudad. Siigo los exige para emitir la
+-- factura, así que sin este catálogo no hay forma de llenar state_code /
+-- city_code. Es de referencia: lo lee cualquier usuario autenticado y nadie
+-- lo escribe desde la aplicación.
+-- ============================================================================
+
+create table dane_locations (
+  city_code text primary key,          -- 5 dígitos, p.ej. 11001
+  city_name text not null,
+  state_code text not null,            -- 2 dígitos, p.ej. 11
+  department text not null
+);
+
+create index dane_locations_department_idx on dane_locations (department);
+
+-- (las ~140 filas sembradas van en web/supabase/migrations/0015_*.sql)
+
 create table customers (
   id uuid primary key default gen_random_uuid(),
   customer_type text not null,                    -- 'natural' | 'juridica' (validado en backend)
@@ -131,6 +150,14 @@ create table customers (
   channel text,
   credit_limit numeric(14,2),
   website_social text,
+  birthday date,                                   -- se usa sobre todo en B2C
+
+  branch_code text,                                -- código de sucursal de la vendedora
+  phone_indicative text,                           -- indicativo (601, 604, …)
+  contact_first_name text,                         -- persona de contacto del salón
+  contact_last_name text,
+  contact_email text,                              -- el correo DIAN es customers.email
+  contact_phone text,
 
   siigo_customer_id text,
   ghl_contact_id text,
@@ -281,9 +308,11 @@ create table quotes (
   status quote_status not null default 'DRAFT',
   source_type order_source_type not null default 'LIVE',
   price_list text,
+  payment_method text,
   subtotal numeric(14,2) not null default 0,
   discount_total numeric(14,2) not null default 0,
   tax_total numeric(14,2) not null default 0,
+  retention_percent numeric(5,2) not null default 0,  -- misma retención que el pedido: el total cotizado es el que se paga
   retention_total numeric(14,2) not null default 0,
   grand_total numeric(14,2) not null default 0,
   valid_until date,
@@ -344,6 +373,7 @@ create table orders (
   subtotal_net numeric(14,2) not null default 0,
   tax_total numeric(14,2) not null default 0,
   retention_percent numeric(5,2) not null default 0,   -- % aplicado (doc 06 §14: elige el id de Retefuente en Siigo)
+  sale_origin text,                                   -- de dónde salió la venta; solo reportes, nunca afecta la factura
   retention_total numeric(14,2) not null default 0,
   grand_total numeric(14,2) not null default 0,
 
@@ -887,6 +917,7 @@ grant execute on function current_wow_role() to authenticated;
 grant execute on function current_wow_user_id() to authenticated;
 
 alter table users enable row level security;
+alter table dane_locations enable row level security;
 alter table customers enable row level security;
 alter table customer_assignments enable row level security;
 alter table customer_activities enable row level security;
@@ -926,6 +957,10 @@ create policy users_select on users for select
 
 -- Clientes: todo usuario interno activo puede leer (necesario para detectar
 -- duplicados, doc 01 §6); escritura solo vendedora+ (backend valida propiedad)
+-- dane_locations: catálogo de referencia, solo lectura
+create policy dane_locations_select on dane_locations for select
+  using (auth.uid() is not null);
+
 create policy customers_select on customers for select
   using (current_wow_role() is not null);
 create policy customers_insert on customers for insert
@@ -1020,6 +1055,37 @@ create policy attachments_select on attachments for select
   using (current_wow_role() is not null);
 create policy attachments_insert on attachments for insert
   with check (current_wow_role() is not null);
+-- Borrar: solo mientras el pedido sigue siendo editable por su vendedora, o
+-- supervisión. Un comprobante ya revisado es la prueba de que el pago entró
+-- (migración 0018 — la Fase 1 dejó la tabla sin política de DELETE, así que
+-- borrar no daba error: simplemente no afectaba ninguna fila).
+create policy attachments_delete on attachments for delete
+  using (
+    current_wow_role() in ('SUPERVISOR', 'ADMIN')
+    or (
+      entity_type = 'order'
+      and exists (
+        select 1 from orders o
+        where o.id = attachments.entity_id
+          and o.seller_id = current_wow_user_id()
+          and o.status in ('DRAFT', 'RETURNED_TO_SELLER')
+      )
+    )
+  );
+
+-- ----------------------------------------------------------------------------
+-- Storage de comprobantes (migración 0018). Bucket privado: un comprobante
+-- lleva datos bancarios del cliente, así que nunca se sirve por URL pública,
+-- solo por URL firmada de vida corta. Ruta: orders/<order_id>/<uuid>.<ext> —
+-- el pedido va en la ruta para que la política pueda decidir con las mismas
+-- reglas que ya gobiernan el pedido, sin una tabla de permisos aparte.
+-- Ver el detalle completo en web/supabase/migrations/0018_receipts_storage.sql:
+--   bucket 'receipts' (privado, 10 MB, imágenes + PDF)
+--   receipt_path_order_id(text)   -- extrae el pedido de la ruta
+--   receipts_select / receipts_insert / receipts_delete on storage.objects
+--   register_order_receipt(...)   -- valida MIME, tamaño y ruta
+--   delete_order_receipt(uuid)    -- borra la fila y devuelve la ruta
+-- No hay política de UPDATE a propósito: los archivos son inmutables.
 
 -- Facturación: solo lectura desde el cliente. Toda escritura pasa por
 -- función backend con service_role (doc 01 §18, doc 03 §13) — nunca INSERT

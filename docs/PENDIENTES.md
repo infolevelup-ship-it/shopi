@@ -681,13 +681,58 @@ Decidido a propósito, no es un olvido:
 
 Sigue pendiente del plan acordado (fases D a G, en ese orden):
 
-- [ ] **D** — comprobantes de pago: bucket privado en Supabase Storage con RLS, hasta 3 archivos,
-      siempre opcional (decisión del usuario, punto 3), filas en la tabla `attachments` que ya
-      existe, visibles para bodega.
+- [x] **D** — comprobantes de pago. Ver la sección propia más abajo.
 - [ ] **E** — impresión/PDF: rutas `/orders/[id]/imprimir` y `/quotes/[id]/imprimir`, con el botón
       claramente separado de "Facturar".
 - [ ] **F** — visitas a prospectos sobre la tabla `prospects` que ya existe.
 - [ ] **G** — editar el pedido mientras está en `DRAFT` o `RETURNED_TO_SELLER`.
+
+## Fase D (comprobantes de pago) — construido y probado
+
+La tabla `attachments` y el tope de 3 por pedido existen desde la Fase 1; lo que faltaba era dónde
+viven los archivos, quién puede verlos y la pantalla. Migración `0018_receipts_storage.sql`.
+
+- [x] Bucket privado `receipts` (10 MB, imágenes + PDF). Nunca hay URL pública: un comprobante
+      lleva datos bancarios del cliente, así que solo se sirve por URL firmada de una hora, y solo
+      a quien la RLS deja leer la fila.
+- [x] Ruta `orders/<order_id>/<uuid>.<ext>`. El pedido va **en la ruta** a propósito: así la
+      política de storage decide reusando la RLS que ya gobierna `orders`, sin una tabla de
+      permisos aparte. Una vendedora solo puede subir a sus pedidos; bodega y supervisión, a
+      todos.
+- [x] `register_order_receipt()` valida MIME, tamaño y que la ruta corresponda al pedido
+      (doc 05 §12); el tope de 3 lo sigue aplicando el trigger de la Fase 1.
+- [x] Borrar: solo la vendedora dueña mientras el pedido está en `DRAFT`/`RETURNED_TO_SELLER`, o
+      supervisión. Un comprobante ya revisado por bodega es la prueba de que el pago entró.
+- [x] El archivo sube **directo del navegador al bucket**, no a través del servidor de Next: una
+      foto de celular supera con facilidad el límite de tamaño de una server action.
+- [x] Siempre opcional (decisión del usuario, punto 3): la tarjeta lo dice con una etiqueta y
+      nada bloquea el pedido por no tener comprobantes.
+- [x] Probado con sesiones JWT reales (vendedora, bodega, supervisión): 11 casos sobre las
+      funciones (tope de 3, MIME prohibido, 11 MB, ruta de otro pedido, pedido ajeno, borrado
+      permitido y negado, bodega ve pero no borra, supervisión sí borra) y 6 sobre las políticas
+      del bucket (sube al propio pedido, no al ajeno, rechaza rutas fuera de convención y un id
+      malformado sin reventar, bodega lee, sesión sin usuario WOW no ve nada).
+
+Hueco de RLS encontrado y corregido de paso:
+
+- `attachments` tenía select e insert desde la Fase 1 pero **no tenía política de DELETE**. Es el
+  mismo patrón que ya mordió dos veces en este proyecto: sin política, el DELETE no da error —
+  simplemente no afecta ninguna fila. Agregada `attachments_delete` con las mismas reglas que el
+  objeto en storage, para que no se puedan desincronizar.
+
+No verificado desde aquí (la red del entorno no alcanza Supabase):
+
+- [ ] La subida real desde el navegador. La lógica de política sí se ejercitó por SQL, pero el
+      camino `upload()` → `register_order_receipt()` → refresco de pantalla no se pudo correr
+      contra el servicio de Storage.
+- [ ] La política de DELETE sobre `storage.objects`: Supabase bloquea los `delete` directos por
+      SQL (trigger `storage.protect_delete`), así que solo se puede ejercitar a través de la API
+      de Storage, que es justo lo que no alcanzo desde aquí. La política está escrita con las
+      mismas condiciones que `attachments_delete`, que sí quedó probada.
+- [ ] Archivos huérfanos: si el registro falla después de subir, la aplicación retira el archivo
+      del bucket. Si ese retiro también falla (o se cierra el navegador en medio), queda un
+      archivo invisible ocupando espacio. Sin barrido automático por ahora; conviene revisar el
+      bucket de vez en cuando cuando haya volumen real.
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
