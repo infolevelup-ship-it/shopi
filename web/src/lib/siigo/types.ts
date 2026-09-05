@@ -57,6 +57,24 @@ export type SiigoCustomer = {
   active?: boolean;
   vat_responsible?: boolean;
   fiscal_responsibilities?: SiigoFiscalResponsibility[];
+  address?: {
+    address?: string;
+    city?: {
+      country_code?: string;
+      state_code?: string;
+      state_name?: string;
+      city_code?: string;
+      city_name?: string;
+    };
+    postal_code?: string;
+  };
+  phones?: { indicative?: string; number?: string; extension?: string }[];
+  contacts?: {
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    phone?: { indicative?: string; number?: string; extension?: string };
+  }[];
 };
 
 export type SiigoCustomerListResponse = {
@@ -113,6 +131,9 @@ export type SiigoInvoiceListResponse = {
 };
 
 // Payload de creación — mismo shape que SiigoCustomer sin `id`/`active`.
+/** Actualizar acepta el mismo cuerpo que crear (PUT /v1/customers/{id}). */
+export type SiigoCustomerUpdatePayload = SiigoCustomerCreatePayload;
+
 export type SiigoCustomerCreatePayload = {
   person_type: "Person" | "Company";
   id_type: { code: string };

@@ -127,6 +127,38 @@ export async function findSiigoCustomersByIdentification(identification: string)
   return data.results ?? [];
 }
 
+// Una página del maestro de terceros. El llamador controla el avance porque
+// el catálogo puede tener decenas de miles y no cabe en una sola petición
+// serverless: se importa por lotes, guardando por dónde iba.
+export async function listSiigoCustomersPage(
+  page: number,
+  pageSize = 100,
+): Promise<{ clientes: SiigoCustomer[]; total: number | null }> {
+  const res = await siigoFetch(`/v1/customers?page=${page}&page_size=${pageSize}`);
+  if (!res.ok) {
+    throw new SiigoApiError("Error listando terceros de Siigo", res.status, await safeText(res));
+  }
+  const data = (await res.json()) as SiigoCustomerListResponse;
+  return {
+    clientes: data.results ?? [],
+    total: data.pagination?.total_results ?? null,
+  };
+}
+
+export async function updateSiigoCustomer(
+  siigoCustomerId: string,
+  payload: SiigoCustomerCreatePayload,
+): Promise<SiigoCustomer> {
+  const res = await siigoFetch(`/v1/customers/${encodeURIComponent(siigoCustomerId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new SiigoApiError("Error actualizando tercero en Siigo", res.status, await safeText(res));
+  }
+  return (await res.json()) as SiigoCustomer;
+}
+
 export async function createSiigoCustomer(payload: SiigoCustomerCreatePayload): Promise<SiigoCustomer> {
   const res = await siigoFetch("/v1/customers", {
     method: "POST",
@@ -184,6 +216,13 @@ const DOCUMENT_TYPE_TO_SIIGO_ID_TYPE: Record<string, string> = {
   PAS: "41",
   TI: "12",
 };
+
+// Inverso del mapa de arriba: lo que llega de Siigo hay que traducirlo a
+// nuestros códigos. Un tipo desconocido NO se adivina — el cliente se salta y
+// se reporta, porque inventar el tipo de documento es inventar datos fiscales.
+export const SIIGO_ID_TYPE_TO_DOCUMENT_TYPE: Record<string, string> = Object.fromEntries(
+  Object.entries(DOCUMENT_TYPE_TO_SIIGO_ID_TYPE).map(([nuestro, siigo]) => [siigo, nuestro]),
+);
 
 export type WowCustomerForSiigo = {
   customer_type: string;

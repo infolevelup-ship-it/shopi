@@ -5,6 +5,7 @@ import { getCurrentProfile } from "@/lib/auth";
 import { SiigoSyncButton } from "./siigo-sync-button";
 import { GhlSyncStatus } from "./ghl-sync-status";
 import { FollowUpsPanel } from "./followups-panel";
+import { ClaimCustomerButton } from "./claim-button";
 import { Callout, PageHeader, StatTile, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatDate, formatDateTime, formatMoney } from "@/lib/ui/format";
 import {
@@ -57,7 +58,7 @@ export default async function CustomerDetailPage({
     supabase
       .from("customers")
       .select(
-        "id, customer_type, document_type, document_number, check_digit, legal_name, first_name, last_name, commercial_name, email, phone, phone_indicative, address, city, department, state_code, city_code, postal_code, status, created_at, fiscal_responsibility, fiscal_responsibilities, vat_responsible, purchase_type, customer_type_classification, channel, credit_limit, website_social, birthday, branch_code, contact_first_name, contact_last_name, contact_email, contact_phone, siigo_customer_id, responsible_user_id, ghl_sync_status, ghl_sync_error, responsible:users!customers_responsible_user_id_fkey(name)",
+        "id, customer_type, document_type, document_number, check_digit, legal_name, first_name, last_name, commercial_name, email, phone, phone_indicative, address, city, department, state_code, city_code, postal_code, status, created_at, source, fiscal_responsibility, fiscal_responsibilities, vat_responsible, purchase_type, customer_type_classification, channel, credit_limit, website_social, birthday, branch_code, contact_first_name, contact_last_name, contact_email, contact_phone, siigo_customer_id, responsible_user_id, ghl_sync_status, ghl_sync_error, responsible:users!customers_responsible_user_id_fkey(name)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -120,6 +121,14 @@ export default async function CustomerDetailPage({
     profile?.role === "SELLER" &&
     !!customer.responsible_user_id &&
     customer.responsible_user_id !== profile.id;
+  // Mismas condiciones que aplica `update_customer` en la base.
+  const canEditCustomer =
+    !!profile &&
+    (profile.role === "SUPERVISOR" ||
+      profile.role === "ADMIN" ||
+      customer.responsible_user_id === null ||
+      customer.responsible_user_id === profile.id);
+
   const contactName =
     `${customer.contact_first_name ?? ""} ${customer.contact_last_name ?? ""}`.trim() || null;
 
@@ -136,7 +145,22 @@ export default async function CustomerDetailPage({
             {responsible?.name ?? "sin asignar"}
           </>
         }
-        actions={<StatusBadge kind="customer" status={customer.status} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge kind="customer" status={customer.status} />
+            {/* Origen visible: distingue de un vistazo un cliente antiguo de
+                Siigo de uno creado aquí, que es lo que decide si editarlo
+                pide confirmación. */}
+            {customer.source === "SIIGO" && (
+              <span className="badge badge-purple">Antiguo de Siigo</span>
+            )}
+            {canEditCustomer && (
+              <Link href={`/customers/${customer.id}/editar`} className="btn btn-secondary btn-sm">
+                Editar
+              </Link>
+            )}
+          </div>
+        }
       />
 
       {isSomeoneElses && (
@@ -150,6 +174,20 @@ export default async function CustomerDetailPage({
 
       {/* doc 11 §49: acciones contextuales — desde el cliente se crea pedido,
           cotización o seguimiento sin volver a buscarlo */}
+      {/* Un cliente importado de Siigo llega sin vendedora. `create_order` la
+          exige, así que sin tomarlo no se le puede hacer un pedido. */}
+      {!customer.responsible_user_id && canSell && (
+        <div className="mb-5">
+          <Callout tone="info" title="Este cliente no tiene vendedora responsable">
+            Viene del maestro de Siigo y nadie lo ha tomado todavía. Hazte responsable para poder
+            crearle pedidos.
+            <div className="mt-3">
+              <ClaimCustomerButton customerId={customer.id} />
+            </div>
+          </Callout>
+        </div>
+      )}
+
       {canSell && (
         <div className="mb-6 flex flex-col gap-2 sm:flex-row">
           <Link href={`/orders/new?cliente=${customer.id}`} className="btn btn-primary">

@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   checkDuplicateCustomer,
   createCustomerAction,
+  updateCustomerAction,
   type CreateCustomerInput,
   type DuplicateCheckResult,
 } from "@/lib/actions/customers";
@@ -23,7 +24,7 @@ import {
 } from "@/lib/ui/fiscal";
 import { SCard, SSelect, SText } from "@/components/siigo-fields";
 
-type FormState = {
+export type FormState = {
   customerType: "natural" | "juridica";
   documentType: string;
   documentNumber: string;
@@ -92,6 +93,15 @@ const initialState: FormState = {
   creditLimit: "",
 };
 
+/** Cliente existente, cuando el formulario se usa para editar. */
+export type CustomerEdit = {
+  id: string;
+  /** "SIIGO" = venía del maestro de Siigo antes de existir aquí. */
+  source: string | null;
+  siigoCustomerId: string | null;
+  values: FormState;
+};
+
 export type ProspectPrefill = {
   id: string;
   name: string;
@@ -104,12 +114,20 @@ export type ProspectPrefill = {
 export function NewCustomerForm({
   locations,
   fromProspect = null,
+  editing = null,
 }: {
   locations: DaneLocation[];
   fromProspect?: ProspectPrefill | null;
+  editing?: CustomerEdit | null;
 }) {
   const router = useRouter();
+  const esEdicion = !!editing;
+  // "Antiguo de Siigo": llegó del maestro de Siigo, no se creó aquí. Editarlo
+  // toca datos que ya usan la contabilidad y las facturas emitidas.
+  const esAntiguoDeSiigo = editing?.source === "SIIGO";
+
   const [form, setForm] = useState<FormState>(() => {
+    if (editing) return editing.values;
     if (!fromProspect) return initialState;
     // La ciudad del prospecto es texto libre: si coincide con una del catálogo
     // DANE se preselecciona con sus códigos; si no, se deja vacía para que la
@@ -206,7 +224,60 @@ export function NewCustomerForm({
     };
   }
 
-  async function doCreate() {
+  async function doSave() {
+    if (editing) {
+      // El documento y el tipo de cliente no viajan: `update_customer` no los
+      // acepta porque cambiarlos convertiría al cliente en otro distinto.
+      const entrada = toInput();
+      const result = await updateCustomerAction({
+        customerId: editing.id,
+        legalName: entrada.legalName,
+        firstName: entrada.firstName,
+        lastName: entrada.lastName,
+        commercialName: entrada.commercialName,
+        email: entrada.email,
+        phone: entrada.phone,
+        address: entrada.address,
+        city: entrada.city,
+        checkDigit: entrada.checkDigit,
+        branchCode: entrada.branchCode,
+        department: entrada.department,
+        stateCode: entrada.stateCode,
+        cityCode: entrada.cityCode,
+        postalCode: entrada.postalCode,
+        fiscalResponsibilities: entrada.fiscalResponsibilities,
+        vatResponsible: entrada.vatResponsible,
+        phoneIndicative: entrada.phoneIndicative,
+        phoneExtension: entrada.phoneExtension,
+        contactFirstName: entrada.contactFirstName,
+        contactLastName: entrada.contactLastName,
+        contactEmail: entrada.contactEmail,
+        contactIndicative: entrada.contactIndicative,
+        contactPhone: entrada.contactPhone,
+        purchaseType: entrada.purchaseType,
+        customerTypeClassification: entrada.customerTypeClassification,
+        channel: entrada.channel,
+        creditLimit: entrada.creditLimit,
+        websiteSocial: entrada.websiteSocial,
+        birthday: entrada.birthday,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // El cliente ya quedó guardado; si el envío a Siigo falló hay que
+      // decirlo, no dejar creer que allá también se actualizó.
+      if (result.siigoSync === "error") {
+        setError(
+          `Los cambios se guardaron en WOW, pero no se pudieron enviar a Siigo: ${result.siigoError ?? ""}`,
+        );
+        return;
+      }
+      router.push(`/customers/${editing.id}`);
+      router.refresh();
+      return;
+    }
+
     const result = await createCustomerAction(toInput());
     if (!result.ok) {
       setError(result.error);
@@ -237,6 +308,28 @@ export function NewCustomerForm({
     if (!form.documentNumber.trim()) return;
     if (isCompany ? !form.legalName.trim() : !form.firstName.trim() || !form.lastName.trim()) return;
 
+    if (esEdicion) {
+      // Confirmación solo para los antiguos de Siigo. Los creados aquí se
+      // guardan sin preguntar: pedir confirmación en todo entrena a la gente
+      // a decir que sí sin leer, y entonces el aviso deja de servir.
+      if (
+        esAntiguoDeSiigo &&
+        !confirm(
+          "Este cliente es antiguo en Siigo: sus datos ya se usan en la contabilidad y en facturas emitidas.\n\n¿Seguro que quieres editarlo? Los cambios también se enviarán a Siigo.",
+        )
+      ) {
+        return;
+      }
+      startTransition(async () => {
+        try {
+          await doSave();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Error guardando el cliente");
+        }
+      });
+      return;
+    }
+
     startTransition(async () => {
       try {
         const dup = await checkDuplicateCustomer(form.documentType, form.documentNumber, form.phone);
@@ -250,7 +343,7 @@ export function NewCustomerForm({
           setPhoneWarning(dup.phoneMatches); // doc 01 §7: avisar, no bloquear
           return;
         }
-        await doCreate();
+        await doSave();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error creando el cliente");
       }
@@ -261,7 +354,7 @@ export function NewCustomerForm({
     setError(null);
     startTransition(async () => {
       try {
-        await doCreate();
+        await doSave();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error creando el cliente");
       }
@@ -274,6 +367,16 @@ export function NewCustomerForm({
     // tarjeta queda en ~356px y las etiquetas se partían encima del campo
     // siguiente. Midiendo la tarjeta, el reparto se decide con el ancho real.
     <form onSubmit={handleSubmit} className="@container grid gap-5">
+      {esAntiguoDeSiigo && (
+        <div className="rounded-xl border border-warning/40 bg-warning-bg p-4 text-sm text-[#b54708]">
+          <p className="font-semibold">Este cliente es antiguo en Siigo</p>
+          <p className="mt-1">
+            Ya existía en la contabilidad antes de esta plataforma, y sus datos aparecen en
+            facturas emitidas. Lo que cambies aquí <strong>también se enviará a Siigo</strong>.
+          </p>
+        </div>
+      )}
+
       <div className="grid gap-5 @3xl:grid-cols-2 @3xl:items-start">
         {/* ======================================================== izquierda */}
         <SCard title="Datos básicos" required className="@container">
@@ -284,6 +387,7 @@ export function NewCustomerForm({
               value={form.customerType}
               onChange={(v) => update("customerType", v as "natural" | "juridica")}
               options={PERSON_TYPES}
+              disabled={esEdicion}
             />
             <SSelect
               id="doc-type"
@@ -291,6 +395,7 @@ export function NewCustomerForm({
               value={form.documentType}
               onChange={(v) => update("documentType", v)}
               options={DOCUMENT_TYPES}
+              disabled={esEdicion}
             />
 
             {/* Siigo pone el Dv al lado de la identificación siempre, no solo
@@ -304,6 +409,11 @@ export function NewCustomerForm({
                 value={form.documentNumber}
                 onChange={(v) => update("documentNumber", v)}
                 error={missing(form.documentNumber)}
+                disabled={esEdicion}
+                // Cambiar el documento convierte al cliente en otro distinto:
+                // rompería el emparejamiento con Siigo y con las facturas ya
+                // emitidas. Para eso está la fusión de duplicados.
+                hint={esEdicion ? "El documento no se puede cambiar" : undefined}
               />
               <SText
                 id="check-digit"
@@ -620,10 +730,14 @@ export function NewCustomerForm({
       <div className="flex flex-col gap-2 sm:flex-row">
         <button type="submit" disabled={isPending} className="btn btn-primary btn-block-mobile">
           {isPending
-            ? "Verificando…"
-            : fromProspect
-              ? "Crear cliente y cerrar prospecto"
-              : "Crear cliente"}
+            ? esEdicion
+              ? "Guardando…"
+              : "Verificando…"
+            : esEdicion
+              ? "Guardar cambios"
+              : fromProspect
+                ? "Crear cliente y cerrar prospecto"
+                : "Crear cliente"}
         </button>
       </div>
     </form>

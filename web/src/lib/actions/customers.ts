@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { syncCustomerToGhlAction } from "@/lib/actions/ghl";
+import { pushCustomerUpdateToSiigoAction } from "@/lib/actions/siigo";
 
 function normalizeDocument(raw: string) {
   return raw.replace(/\D/g, "");
@@ -335,4 +336,78 @@ export async function createCustomerAction(
   await syncCustomerToGhlAction(data!.id);
 
   return { ok: true, customerId: data!.id };
+}
+
+
+// ---------------------------------------------------------------- editar
+
+export type UpdateCustomerInput = Omit<
+  CreateCustomerInput,
+  "customerType" | "documentType" | "documentNumber"
+> & { customerId: string };
+
+export type UpdateCustomerResult =
+  | { ok: true; siigoSync: "no_aplica" | "ok" | "error"; siigoError?: string }
+  | { ok: false; error: string };
+
+/**
+ * Guarda los cambios y, si el cliente ya existe en Siigo, los empuja allá.
+ * El documento no se edita: cambiarlo convertiría al cliente en otro distinto
+ * y rompería el emparejamiento con el histórico de facturas.
+ */
+export async function updateCustomerAction(
+  input: UpdateCustomerInput,
+): Promise<UpdateCustomerResult> {
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("update_customer", {
+    p_customer_id: input.customerId,
+    p_legal_name: input.legalName || undefined,
+    p_first_name: input.firstName || undefined,
+    p_last_name: input.lastName || undefined,
+    p_commercial_name: input.commercialName || undefined,
+    p_email: input.email || undefined,
+    p_phone: input.phone || undefined,
+    p_address: input.address || undefined,
+    p_city: input.city || undefined,
+    p_check_digit: input.checkDigit || undefined,
+    p_branch_code: input.branchCode || undefined,
+    p_department: input.department || undefined,
+    p_state_code: input.stateCode || undefined,
+    p_city_code: input.cityCode || undefined,
+    p_postal_code: input.postalCode || undefined,
+    p_fiscal_responsibilities: input.fiscalResponsibilities?.length
+      ? input.fiscalResponsibilities
+      : undefined,
+    p_vat_responsible: input.vatResponsible ?? undefined,
+    p_phone_indicative: input.phoneIndicative || undefined,
+    p_phone_extension: input.phoneExtension || undefined,
+    p_contact_first_name: input.contactFirstName || undefined,
+    p_contact_last_name: input.contactLastName || undefined,
+    p_contact_email: input.contactEmail || undefined,
+    p_contact_indicative: input.contactIndicative || undefined,
+    p_contact_phone: input.contactPhone || undefined,
+    p_purchase_type: input.purchaseType || undefined,
+    p_customer_type_classification: input.customerTypeClassification || undefined,
+    p_channel: input.channel || undefined,
+    p_credit_limit: input.creditLimit ?? undefined,
+    p_website_social: input.websiteSocial || undefined,
+    p_birthday: input.birthday || undefined,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  // El cliente ya quedó guardado en WOW pase lo que pase con Siigo: si el
+  // envío falla se avisa, pero no se deshace la edición ni se pierde.
+  const sync = await pushCustomerUpdateToSiigoAction(input.customerId);
+  return { ok: true, siigoSync: sync.outcome, siigoError: sync.error };
+}
+
+export async function claimCustomerAction(
+  customerId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("claim_customer", { p_customer_id: customerId });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

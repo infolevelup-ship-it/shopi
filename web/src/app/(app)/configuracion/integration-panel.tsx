@@ -11,6 +11,11 @@ import {
 } from "@/lib/actions/integrations";
 import { syncProductCatalogAction, type CatalogSyncResult } from "@/lib/actions/catalog";
 import {
+  importCustomersFromSiigoAction,
+  type CustomerImportResult,
+  type ImportCursor,
+} from "@/lib/actions/customer-import";
+import {
   SIIGO_DOC_ELECTRONIC,
   SIIGO_DOC_TEST,
   type IntegrationSettings,
@@ -49,11 +54,18 @@ function Switch({
   );
 }
 
-export function IntegrationPanel({ settings }: { settings: IntegrationSettings }) {
+export function IntegrationPanel({
+  settings,
+  importCursor,
+}: {
+  settings: IntegrationSettings;
+  importCursor: ImportCursor;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [test, setTest] = useState<ConnectionTest | null>(null);
   const [catalogo, setCatalogo] = useState<CatalogSyncResult | null>(null);
+  const [importe, setImporte] = useState<CustomerImportResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
@@ -68,6 +80,7 @@ export function IntegrationPanel({ settings }: { settings: IntegrationSettings }
     });
   }
 
+  const [cursorActual, setCursorActual] = useState(importCursor);
   const enPruebas = settings.isTestDocument;
 
   return (
@@ -259,6 +272,113 @@ export function IntegrationPanel({ settings }: { settings: IntegrationSettings }
             )}
           </div>
         )}
+      </section>
+
+      {/* ------------------------------------------------- clientes de Siigo */}
+      <section className="card card-pad">
+        <h2 className="text-base font-semibold">Clientes de Siigo</h2>
+        <p className="mt-1 mb-3 text-sm text-text-soft">
+          Trae el maestro de terceros. Puede ser muy grande, así que{" "}
+          <strong>avanza por tandas</strong>: cada vez que pulses importa lo que alcance y guarda
+          por dónde iba, sin repetir trabajo.
+        </p>
+
+        <div className="mb-3 rounded-xl border border-line bg-surface-soft p-3 text-sm">
+          {cursorActual.done ? (
+            <p className="text-success">
+              ✔ Importación terminada: {cursorActual.imported} clientes.
+            </p>
+          ) : cursorActual.imported > 0 ? (
+            <p>
+              Importados <strong>{cursorActual.imported}</strong>
+              {cursorActual.total ? ` de ~${cursorActual.total}` : ""} — falta continuar.
+            </p>
+          ) : (
+            <p className="text-text-soft">Todavía no se ha importado ningún cliente.</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            disabled={isPending || !settings.siigoEnabled}
+            onClick={() =>
+              startTransition(async () => {
+                setError(null);
+                const r = await importCustomersFromSiigoAction(false);
+                setImporte(r);
+                if (r.ok) setCursorActual(r.cursor);
+                router.refresh();
+              })
+            }
+            className="btn btn-primary btn-block-mobile"
+          >
+            {isPending
+              ? "Importando…"
+              : cursorActual.done
+                ? "Ya está al día"
+                : cursorActual.imported > 0
+                  ? "Continuar importación"
+                  : "Importar clientes"}
+          </button>
+
+          {cursorActual.imported > 0 && (
+            <button
+              type="button"
+              disabled={isPending || !settings.siigoEnabled}
+              onClick={() => {
+                if (!confirm("¿Volver a empezar desde el primer cliente? No borra nada, solo reinicia el recorrido.")) return;
+                startTransition(async () => {
+                  setError(null);
+                  const r = await importCustomersFromSiigoAction(true);
+                  setImporte(r);
+                  if (r.ok) setCursorActual(r.cursor);
+                  router.refresh();
+                });
+              }}
+              className="btn btn-secondary btn-block-mobile"
+            >
+              Empezar de nuevo
+            </button>
+          )}
+        </div>
+
+        {!settings.siigoEnabled && (
+          <p className="mt-2 text-xs text-text-muted">
+            Enciende la conexión con Siigo para poder importar.
+          </p>
+        )}
+
+        {importe && !importe.ok && (
+          <div className="mt-3 rounded-xl border border-danger/30 bg-danger-bg p-3 text-sm text-[#b42318]">
+            {importe.error}
+            <p className="mt-1 text-text-soft">
+              Lo ya importado se conservó. Puedes volver a pulsar para continuar.
+            </p>
+          </div>
+        )}
+
+        {importe && importe.ok && (
+          <div className="mt-3 rounded-xl border border-success/30 bg-success-bg p-3 text-sm">
+            <p className="font-medium text-[#05834b]">
+              ✔ {importe.importadosAhora} clientes en esta tanda.
+              {importe.cursor.done ? " Importación completa." : " Pulsa de nuevo para continuar."}
+            </p>
+            {/* Un tipo de documento que no reconocemos no se adivina: sería
+                inventar un dato fiscal y la factura saldría mal. */}
+            {importe.omitidos > 0 && (
+              <p className="mt-1 text-[#b54708]">
+                ⚠ {importe.omitidos} se omitieron por tener un tipo de documento que no
+                reconocemos. Revísalos en Siigo.
+              </p>
+            )}
+          </div>
+        )}
+
+        <p className="s-note mt-3">
+          Los importados llegan <strong>sin vendedora asignada</strong> y marcados como “antiguo de
+          Siigo”: al editarlos, la app pide confirmación y envía los cambios de vuelta a Siigo.
+        </p>
       </section>
 
       {/* --------------------------------------------------- prueba de conexión */}

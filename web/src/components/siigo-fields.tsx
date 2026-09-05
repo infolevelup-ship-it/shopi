@@ -26,6 +26,8 @@ export function SText({
   type = "text",
   inputMode,
   maxLength,
+  disabled,
+  hint,
   className = "",
 }: {
   id: string;
@@ -37,6 +39,8 @@ export function SText({
   type?: string;
   inputMode?: "text" | "numeric" | "tel" | "email" | "decimal";
   maxLength?: number;
+  disabled?: boolean;
+  hint?: string;
   className?: string;
 }) {
   // Un input de fecha dibuja su formato (dd/mm/aaaa) aunque esté vacío, así que
@@ -60,6 +64,7 @@ export function SText({
         type={type}
         inputMode={inputMode}
         maxLength={maxLength}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         // El espacio es necesario: `:placeholder-shown` es lo que distingue un
@@ -67,6 +72,7 @@ export function SText({
         placeholder=" "
       />
       <label htmlFor={id}>{labelNode(label, required)}</label>
+      {hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
       {error && <p className="s-error">{error}</p>}
     </div>
   );

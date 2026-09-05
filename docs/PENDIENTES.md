@@ -1062,6 +1062,46 @@ Sobre los precios (confirmado contra 100 productos de la cuenta real):
 - [ ] La forma exacta de `/v1/products` (paginación, `prices[].price_list[]`, `unit`) sigue sin
       verificarse contra la API real, como el resto del cliente de Siigo.
 
+## Clientes: importación desde Siigo y edición
+
+- [x] **Importación por tandas.** El maestro de terceros puede tener decenas de miles y no cabe en
+      una sola petición serverless, así que cada pulsación avanza dentro de un presupuesto de ~35 s
+      y guarda el cursor en `app_settings.siigo_customer_import_cursor`. Si se corta, lo importado
+      se conserva y la siguiente pulsación retoma. Botón en `/configuracion`, solo ADMIN.
+- [x] **Emparejamiento por documento**, no por id de Siigo: si el cliente ya existe en la
+      plataforma se actualiza en vez de duplicarse.
+- [x] `import_siigo_customers(jsonb)` en vez de un upsert de PostgREST porque **el índice único de
+      documento es parcial** (`where merged_into_customer_id is null`) y `on conflict (cols)` sin
+      ese predicado lo rechaza Postgres. Habría fallado en producción.
+- [x] Al reimportar **no se pisan `responsible_user_id` ni `source`**: quién atiende al cliente es
+      información de la plataforma, y un cliente creado aquí no se vuelve "antiguo de Siigo" por
+      aparecer también allá. Verificado.
+- [x] Un tipo de documento que no está en el mapa DIAN **no se adivina**: ese cliente se omite y se
+      reporta. Inventar el tipo de documento es inventar un dato fiscal.
+- [x] **`claim_customer`** — los importados llegan sin vendedora, y `create_order` la exige, así
+      que sin esto quedarían visibles pero incapaces de recibir un pedido. Botón "Hacerme
+      responsable" en la ficha, con aviso.
+- [x] **`update_customer` + pantalla de edición** (`/customers/[id]/editar`), reutilizando el mismo
+      formulario fiscal. `customers` tampoco tenía política de UPDATE — sexto caso del patrón.
+- [x] **El documento no se edita**: cambiarlo convertiría al cliente en otro distinto y rompería el
+      emparejamiento con Siigo y con las facturas emitidas. Los campos van bloqueados con su
+      explicación.
+- [x] **Aviso solo para los antiguos de Siigo** (`source = 'SIIGO'`): distintivo morado en la
+      ficha, banner en el formulario y confirmación al guardar. Los creados en la app se guardan
+      sin preguntar — pedir confirmación en todo entrena a la gente a decir que sí sin leer, y
+      entonces el aviso deja de servir.
+- [x] Al guardar, los cambios **se envían a Siigo** si el cliente ya existe allá. El guardado en
+      WOW nunca se deshace por un fallo de Siigo: se avisa y queda en `integration_logs`.
+- [x] Probado con sesiones JWT reales: 9 casos entre edición, apropiación e importación.
+
+- [ ] **Los clientes de prueba NO se borraron.** `orders`, `quotes`, `invoices`, `follow_ups`,
+      `customer_activities` y `customer_assignments` referencian al cliente con **NOT NULL**, así
+      que borrarlos arrastra los 16 pedidos y 6 cotizaciones de demostración — a diferencia de los
+      productos, que sobrevivían por las instantáneas. Es irreversible y deja la app vacía; falta
+      la confirmación del usuario.
+- [ ] La forma exacta de `/v1/customers` (paginación, `address.city`, `phones`, `contacts`) sigue
+      sin verificarse contra la API real.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in

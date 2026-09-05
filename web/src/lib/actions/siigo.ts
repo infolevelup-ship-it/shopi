@@ -9,6 +9,7 @@ import {
   createSiigoCustomer,
   getSiigoProduct,
   buildSiigoCustomerPayload,
+  updateSiigoCustomer,
   SiigoApiError,
 } from "@/lib/siigo/client";
 
@@ -216,4 +217,76 @@ export async function syncOrderProductStockAction(orderId: string): Promise<Stoc
     return { ok: false, error: `No se pudo actualizar stock (${skipped} sin siigo_product_id o con error)` };
   }
   return { ok: true, updated, skipped };
+}
+
+
+export type CustomerPushResult = {
+  outcome: "no_aplica" | "ok" | "error";
+  error?: string;
+};
+
+/**
+ * Empuja a Siigo los datos de un cliente que YA existe allá. Si el cliente
+ * todavía no está en Siigo no hace nada: crearlo es otra operación
+ * (`syncCustomerToSiigoAction`) y exige la decisión explícita de un
+ * administrador.
+ *
+ * Nunca lanza: la edición en WOW ya se guardó, y un fallo aquí solo debe
+ * avisarse, no deshacer lo que la vendedora acaba de corregir.
+ */
+export async function pushCustomerUpdateToSiigoAction(
+  customerId: string,
+): Promise<CustomerPushResult> {
+  const integraciones = await getIntegrationSettings();
+  if (!integraciones.siigoEnabled) {
+    return { outcome: "error", error: "La integración con Siigo está desconectada." };
+  }
+
+  const supabase = await createClient();
+  const { data: customer } = await supabase
+    .from("customers")
+    .select(
+      "id, customer_type, document_type, document_number, document_number_normalized, check_digit, legal_name, first_name, last_name, commercial_name, phone, address, state_code, city_code, fiscal_responsibility, fiscal_responsibilities, vat_responsible, siigo_customer_id",
+    )
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (!customer) return { outcome: "error", error: "Cliente no encontrado" };
+  if (!customer.siigo_customer_id) return { outcome: "no_aplica" };
+
+  const serviceClient = createServiceRoleClient();
+  const startedAt = new Date().toISOString();
+
+  try {
+    const payload = buildSiigoCustomerPayload(customer);
+    await updateSiigoCustomer(customer.siigo_customer_id, payload);
+
+    await serviceClient.from("integration_logs").insert({
+      system: "SIIGO",
+      operation: "CUSTOMER_UPDATE",
+      entity_type: "customer",
+      entity_id: customer.id,
+      external_id: customer.siigo_customer_id,
+      status: "SUCCESS",
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+    });
+    return { outcome: "ok" };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error desconocido";
+    const httpStatus = err instanceof SiigoApiError ? err.status : null;
+    await serviceClient.from("integration_logs").insert({
+      system: "SIIGO",
+      operation: "CUSTOMER_UPDATE",
+      entity_type: "customer",
+      entity_id: customer.id,
+      external_id: customer.siigo_customer_id,
+      status: "ERROR",
+      error_message: message,
+      http_status: httpStatus,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+    });
+    return { outcome: "error", error: message };
+  }
 }

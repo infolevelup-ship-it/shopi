@@ -2114,6 +2114,67 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      claim_customer: {
+        Args: { p_customer_id: string }
+        Returns: {
+          address: string | null
+          birthday: string | null
+          branch_code: string | null
+          channel: string | null
+          check_digit: string | null
+          city: string | null
+          city_code: string | null
+          commercial_name: string | null
+          contact_email: string | null
+          contact_first_name: string | null
+          contact_indicative: string | null
+          contact_last_name: string | null
+          contact_phone: string | null
+          created_at: string
+          credit_limit: number | null
+          customer_type: string
+          customer_type_classification: string | null
+          department: string | null
+          document_number: string
+          document_number_normalized: string
+          document_type: string
+          email: string | null
+          first_name: string | null
+          fiscal_responsibilities: string[] | null
+          fiscal_responsibility: string | null
+          ghl_contact_id: string | null
+          ghl_last_synced_at: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
+          id: string
+          is_duplicate_candidate: boolean
+          last_contact_at: string | null
+          last_name: string | null
+          last_purchase_at: string | null
+          legal_name: string | null
+          merged_into_customer_id: string | null
+          phone: string | null
+          phone_extension: string | null
+          phone_indicative: string | null
+          postal_code: string | null
+          purchase_type: string | null
+          responsible_user_id: string | null
+          secondary_phone: string | null
+          siigo_customer_id: string | null
+          source: string | null
+          state_code: string | null
+          status: Database["public"]["Enums"]["customer_status"]
+          updated_at: string
+          vat_responsible: boolean | null
+          website_social: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "customers"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       complete_follow_up: {
         Args: { p_follow_up_id: string; p_result: string }
         Returns: {
@@ -2416,6 +2477,7 @@ export type Database = {
         Args: { p_attachment_id: string }
         Returns: string
       }
+      import_siigo_customers: { Args: { p_customers: Json }; Returns: number }
       mark_prospect_lost: {
         Args: { p_prospect_id: string; p_reason: string }
         Returns: {
@@ -2802,6 +2864,98 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_customer: {
+        Args: {
+          p_address?: string
+          p_birthday?: string
+          p_branch_code?: string
+          p_channel?: string
+          p_check_digit?: string
+          p_city?: string
+          p_city_code?: string
+          p_commercial_name?: string
+          p_contact_email?: string
+          p_contact_first_name?: string
+          p_contact_indicative?: string
+          p_contact_last_name?: string
+          p_contact_phone?: string
+          p_credit_limit?: number
+          p_customer_id: string
+          p_customer_type_classification?: string
+          p_department?: string
+          p_email?: string
+          p_first_name?: string
+          p_fiscal_responsibilities?: string[]
+          p_last_name?: string
+          p_legal_name?: string
+          p_phone?: string
+          p_phone_extension?: string
+          p_phone_indicative?: string
+          p_postal_code?: string
+          p_purchase_type?: string
+          p_state_code?: string
+          p_vat_responsible?: boolean
+          p_website_social?: string
+        }
+        Returns: {
+          address: string | null
+          birthday: string | null
+          branch_code: string | null
+          channel: string | null
+          check_digit: string | null
+          city: string | null
+          city_code: string | null
+          commercial_name: string | null
+          contact_email: string | null
+          contact_first_name: string | null
+          contact_indicative: string | null
+          contact_last_name: string | null
+          contact_phone: string | null
+          created_at: string
+          credit_limit: number | null
+          customer_type: string
+          customer_type_classification: string | null
+          department: string | null
+          document_number: string
+          document_number_normalized: string
+          document_type: string
+          email: string | null
+          first_name: string | null
+          fiscal_responsibilities: string[] | null
+          fiscal_responsibility: string | null
+          ghl_contact_id: string | null
+          ghl_last_synced_at: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
+          id: string
+          is_duplicate_candidate: boolean
+          last_contact_at: string | null
+          last_name: string | null
+          last_purchase_at: string | null
+          legal_name: string | null
+          merged_into_customer_id: string | null
+          phone: string | null
+          phone_extension: string | null
+          phone_indicative: string | null
+          postal_code: string | null
+          purchase_type: string | null
+          responsible_user_id: string | null
+          secondary_phone: string | null
+          siigo_customer_id: string | null
+          source: string | null
+          state_code: string | null
+          status: Database["public"]["Enums"]["customer_status"]
+          updated_at: string
+          vat_responsible: boolean | null
+          website_social: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "customers"
           isOneToOne: true
           isSetofReturn: false
         }
