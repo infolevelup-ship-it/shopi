@@ -12,41 +12,67 @@ export type CatalogSyncResult =
       total: number;
       creados: number;
       actualizados: number;
+      /** Sin ningún precio en ninguna lista. */
       sinPrecio: number;
+      /** Tiene al menos un precio pero le falta alguna de las tres listas. */
+      conListaIncompleta: number;
       listasDePrecio: string[];
     }
   | { ok: false; error: string };
 
-// Nombres con los que Siigo puede llamar a cada lista de precio. Se empareja
-// por nombre y no por posición porque la posición cambia si alguien reordena
-// las listas en Siigo, y eso pasaría desapercibido: los precios quedarían
-// cruzados sin ningún error visible.
-const PISTAS_LISTA: Record<"publico" | "profesional" | "salon", string[]> = {
-  publico: ["público", "publico", "general", "detal", "sugerido"],
-  profesional: ["profesional", "estilista"],
-  salon: ["salón", "salon", "mayorista", "distribuidor"],
+// Nombres reales de las listas de precio en la cuenta de Productos WOW,
+// confirmados contra 100 productos: "Publico" (sin tilde), "Profesional" y
+// "Salones" (en plural). Se comparan normalizados —sin tildes y en
+// minúsculas— para que un cambio de tipografía en Siigo no las rompa, y
+// quedan pistas de respaldo por si algún día las renombran.
+const NOMBRE_EXACTO: Record<ClaveLista, string> = {
+  publico: "publico",
+  profesional: "profesional",
+  salon: "salones",
 };
+
+// Respaldo por si en Siigo renombran una lista. Deliberadamente NO se empareja
+// por posición: si alguien reordena las listas allá, la posición cambia y los
+// precios quedarían cruzados sin ningún error visible.
+const PISTAS_LISTA: Record<ClaveLista, string[]> = {
+  publico: ["publico", "general", "detal", "sugerido"],
+  profesional: ["profesional", "estilista"],
+  salon: ["salon", "mayorista", "distribuidor"],
+};
+
+type ClaveLista = "publico" | "profesional" | "salon";
+const CLAVES: ClaveLista[] = ["publico", "profesional", "salon"];
+
+/** Sin tildes y en minúsculas: "Salón" y "SALONES" caen en la misma bolsa. */
+function normalizar(texto: string) {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
 
 function precios(p: SiigoProduct) {
   const listas = p.prices?.[0]?.price_list ?? [];
-  const encontrado: Record<string, number | null> = {
+  const encontrado: Record<ClaveLista, number | null> = {
     publico: null,
     profesional: null,
     salon: null,
   };
 
-  for (const [clave, pistas] of Object.entries(PISTAS_LISTA)) {
-    const lista = listas.find((l) => {
-      const nombre = (l.name ?? "").toLowerCase();
-      return pistas.some((pista) => nombre.includes(pista));
+  for (const clave of CLAVES) {
+    const exacta = listas.find((l) => normalizar(l.name ?? "") === NOMBRE_EXACTO[clave]);
+    const aproximada = listas.find((l) => {
+      const nombre = normalizar(l.name ?? "");
+      return PISTAS_LISTA[clave].some((pista) => nombre.includes(pista));
     });
+    const lista = exacta ?? aproximada;
     if (lista?.value != null) encontrado[clave] = Number(lista.value);
   }
 
-  // Si no se reconoció ninguna por nombre, se usa la primera como precio
-  // público: es mejor tener un precio de partida que dejar el producto en
-  // blanco y que la vendedora tenga que escribirlo todo a mano.
-  if (!encontrado.publico && !encontrado.profesional && !encontrado.salon) {
+  // Si no se reconoció ninguna, se usa la primera como precio público: es
+  // mejor tener un precio de partida que dejar el producto en blanco.
+  if (CLAVES.every((c) => encontrado[c] == null)) {
     const primera = listas.find((l) => l.value != null);
     if (primera?.value != null) encontrado.publico = Number(primera.value);
   }
@@ -56,6 +82,7 @@ function precios(p: SiigoProduct) {
     price_professional: encontrado.profesional,
     price_salon: encontrado.salon,
     nombres: listas.map((l) => l.name ?? "(sin nombre)"),
+    faltantes: CLAVES.filter((c) => encontrado[c] == null).length,
   };
 }
 
@@ -115,10 +142,15 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
 
   const listasVistas = new Set<string>();
   let sinPrecio = 0;
+  let conListaIncompleta = 0;
   const filas = productos.map((p) => {
-    const { price_public, price_professional, price_salon, nombres } = precios(p);
+    const { price_public, price_professional, price_salon, nombres, faltantes } = precios(p);
     nombres.forEach((n) => listasVistas.add(n));
-    if (price_public == null && price_professional == null && price_salon == null) sinPrecio++;
+    // Que a un producto le falte una lista NO es un fallo de la sincronización:
+    // es que en Siigo ese producto no tiene ese precio cargado. Se cuentan por
+    // separado para no dar a entender lo contrario en la pantalla.
+    if (faltantes === 3) sinPrecio++;
+    else if (faltantes > 0) conListaIncompleta++;
 
     return {
       // Conservar el id existente hace que el upsert sea una actualización de
@@ -168,6 +200,7 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
       creados,
       actualizados: filas.length - creados,
       sin_precio: sinPrecio,
+      con_lista_incompleta: conListaIncompleta,
       listas_de_precio: [...listasVistas],
     },
   });
@@ -178,6 +211,7 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
     creados,
     actualizados: filas.length - creados,
     sinPrecio,
+    conListaIncompleta,
     listasDePrecio: [...listasVistas],
   };
 }

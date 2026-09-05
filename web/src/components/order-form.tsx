@@ -456,6 +456,18 @@ export function OrderForm({
                       />
                     </div>
 
+                    {/* En Siigo no todos los productos tienen cargadas las tres
+                        listas de precio. Sin este aviso, elegir "Salón" sobre un
+                        producto que no la tiene dejaría el precio público sin que
+                        nadie lo note, y se cotizaría de más. */}
+                    {l.prices[priceList] === null && (
+                      <p className="mt-2 text-xs font-medium text-warning">
+                        ⚠ Este producto no tiene precio en la lista{" "}
+                        {PRICE_LISTS.find((p) => p.value === priceList)?.label}. El precio de
+                        arriba viene de otra lista — revísalo.
+                      </p>
+                    )}
+
                     <div className="mt-2 flex items-center justify-between text-sm">
                       <span className={short ? "font-medium text-danger" : "text-text-soft"}>
                         {l.stock === null

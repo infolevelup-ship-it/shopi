@@ -326,6 +326,15 @@ function NewQuoteForm() {
                     onChange={(v) => updateLine(l.key, { discountPercent: v })}
                   />
                 </div>
+                {/* Mismo aviso que en el pedido: en Siigo no todos los
+                    productos tienen las tres listas cargadas. */}
+                {l.prices[priceList] === null && (
+                  <p className="mt-2 text-xs font-medium text-warning">
+                    ⚠ Sin precio en la lista{" "}
+                    {PRICE_LISTS.find((p) => p.value === priceList)?.label}. El precio viene de
+                    otra lista — revísalo.
+                  </p>
+                )}
                 <div className="mt-2 text-right text-sm font-semibold">
                   {formatMoney(lineTotal(l))}
                 </div>

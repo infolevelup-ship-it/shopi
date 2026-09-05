@@ -1039,17 +1039,22 @@ Los 15 productos de prueba que se habían sembrado no tenían ninguno.
 - [x] El resumen queda en `audit_logs` (`integration_logs` no tiene un campo libre para el
       payload): cuántos entraron, cuántos nuevos, y **qué listas de precio se encontraron**.
 
-Sobre los precios, que es la parte que puede quedar mal:
+Sobre los precios (confirmado contra 100 productos de la cuenta real):
 
-- Las tres listas (`price_public` / `price_professional` / `price_salon`) se emparejan por el
-  **nombre** de la lista en Siigo, con pistas ("público/general/detal", "profesional/estilista",
-  "salón/mayorista/distribuidor"). **No por posición**, a propósito: si alguien reordena las listas
-  en Siigo, la posición cambia y los precios quedarían cruzados sin ningún error visible.
-- Si no se reconoce ninguna, se usa la primera como precio público, y la pantalla dice cuántos
-  productos quedaron así. **No bloquea nada**: el precio real lo pone la vendedora en el pedido, y
-  para facturar lo que hace falta es el id de Siigo y el impuesto, no el precio de catálogo.
-- La pantalla lista los nombres de lista encontrados después de sincronizar, para poder ajustar las
-  pistas si en la cuenta se llaman distinto.
+- Los nombres exactos de las listas en Siigo son **`Publico`** (sin tilde), **`Profesional`** y
+  **`Salones`** (en plural). Se comparan normalizados —sin tildes y en minúsculas— y quedan pistas
+  de respaldo por si algún día las renombran. **Nunca por posición**: si alguien reordena las
+  listas en Siigo, la posición cambia y los precios quedarían cruzados sin ningún error visible.
+- **Solo 65 de cada 100 productos tienen las tres listas cargadas.** El reparto real: 13 solo
+  `Publico`, 10 `Publico`+`Salones`, 7 solo `Salones`, 3 `Profesional`+`Salones`, 2 sin ningún
+  precio. Eso **no es un fallo de la sincronización**: ese precio no existe en Siigo. Cargarlo es
+  trabajo en Siigo, no algo que la app pueda resolver.
+- Por eso la pantalla separa los dos números — "sin ningún precio" y "le falta alguna lista" —, y
+  el **formulario de pedido y el de cotización avisan en la línea** cuando el producto no tiene
+  precio en la lista elegida. Sin ese aviso, elegir "Salón" sobre uno de esos 33 productos dejaría
+  el precio público sin que nadie lo note, y se cotizaría de más.
+- Nada de esto bloquea la facturación: para emitir hacen falta el id de Siigo y el impuesto, no el
+  precio de catálogo.
 
 - [ ] **Falta ejecutarlo.** El catálogo está vacío hasta que se redespliegue en Vercel, se encienda
       la conexión y se pulse "Sincronizar catálogo". No se pudo correr desde estas sesiones porque

@@ -241,13 +241,20 @@ export function IntegrationPanel({ settings }: { settings: IntegrationSettings }
                 Listas de precio encontradas en Siigo: {catalogo.listasDePrecio.join(", ")}.
               </p>
             )}
-            {/* Los precios se emparejan por el NOMBRE de la lista en Siigo. Si
-                se llaman distinto, hay que revisarlos: el producto entra igual
-                y se puede facturar, pero sin precio de partida. */}
+            {/* Dos cosas distintas, y confundirlas haría pensar que la
+                sincronización falló: que a un producto le falte una lista es un
+                dato de Siigo, no un error de aquí. */}
+            {catalogo.conListaIncompleta > 0 && (
+              <p className="mt-1 text-text-soft">
+                {catalogo.conListaIncompleta} productos no tienen las tres listas cargadas en
+                Siigo. No es un fallo de la sincronización: ese precio no existe allá. Al armar un
+                pedido con esa lista, la pantalla lo avisa.
+              </p>
+            )}
             {catalogo.sinPrecio > 0 && (
               <p className="mt-1 text-[#b54708]">
-                ⚠ {catalogo.sinPrecio} quedaron sin precio porque no se reconoció ninguna lista.
-                Se pueden facturar igual; el precio se escribe en el pedido.
+                ⚠ {catalogo.sinPrecio} entraron sin ningún precio. Se pueden facturar igual — el
+                precio se escribe en el pedido.
               </p>
             )}
           </div>
