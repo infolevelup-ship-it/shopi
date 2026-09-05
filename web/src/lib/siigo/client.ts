@@ -7,6 +7,7 @@ import type {
   SiigoInvoiceCreatePayload,
   SiigoInvoiceListResponse,
   SiigoProduct,
+  SiigoProductListResponse,
 } from "./types";
 
 // Capa de integración única con Siigo (doc 06 §2 y §21: "WOW UI -> WOW
@@ -146,6 +147,29 @@ export async function getSiigoProduct(siigoProductId: string): Promise<SiigoProd
     throw new SiigoApiError("Error consultando producto en Siigo", res.status, await safeText(res));
   }
   return (await res.json()) as SiigoProduct;
+}
+
+// Trae el catálogo completo, página por página. Siigo pagina de a 100 como
+// máximo; el tope de páginas es una red de seguridad para que un error de
+// paginación de su lado no se convierta en un bucle infinito contra su API.
+export async function listAllSiigoProducts(maxPages = 60): Promise<SiigoProduct[]> {
+  const todos: SiigoProduct[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await siigoFetch(`/v1/products?page=${page}&page_size=100`);
+    if (!res.ok) {
+      throw new SiigoApiError("Error listando productos de Siigo", res.status, await safeText(res));
+    }
+    const data = (await res.json()) as SiigoProductListResponse;
+    const lote = data.results ?? [];
+    todos.push(...lote);
+
+    // Se para cuando la página viene incompleta o vacía: es el final, y así
+    // no depende de que `total_results` venga bien.
+    if (lote.length < 100) break;
+  }
+
+  return todos;
 }
 
 // Catálogo público DIAN/Siigo de tipos de identificación (igual para

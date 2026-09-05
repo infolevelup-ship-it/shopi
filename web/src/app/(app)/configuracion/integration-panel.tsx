@@ -9,6 +9,7 @@ import {
   testSiigoConnectionAction,
   type ConnectionTest,
 } from "@/lib/actions/integrations";
+import { syncProductCatalogAction, type CatalogSyncResult } from "@/lib/actions/catalog";
 import {
   SIIGO_DOC_ELECTRONIC,
   SIIGO_DOC_TEST,
@@ -52,6 +53,7 @@ export function IntegrationPanel({ settings }: { settings: IntegrationSettings }
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [test, setTest] = useState<ConnectionTest | null>(null);
+  const [catalogo, setCatalogo] = useState<CatalogSyncResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
@@ -189,6 +191,67 @@ export function IntegrationPanel({ settings }: { settings: IntegrationSettings }
             );
           })}
         </div>
+      </section>
+
+      {/* ------------------------------------------------ catálogo de productos */}
+      <section className="card card-pad">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Catálogo de productos</h2>
+            <p className="mt-1 text-sm text-text-soft">
+              Trae desde Siigo todos los productos con su código, impuesto, precios e inventario.
+              Un producto sin sincronizar <strong>no se puede facturar</strong>.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={isPending || !settings.siigoEnabled}
+            onClick={() =>
+              startTransition(async () => {
+                setError(null);
+                setCatalogo(await syncProductCatalogAction());
+              })
+            }
+            className="btn btn-primary btn-block-mobile"
+          >
+            {isPending ? "Sincronizando…" : "Sincronizar catálogo"}
+          </button>
+        </div>
+
+        {!settings.siigoEnabled && (
+          <p className="mt-2 text-xs text-text-muted">
+            Enciende la conexión con Siigo para poder sincronizar.
+          </p>
+        )}
+
+        {catalogo && !catalogo.ok && (
+          <div className="mt-3 rounded-xl border border-danger/30 bg-danger-bg p-3 text-sm text-[#b42318]">
+            {catalogo.error}
+          </div>
+        )}
+
+        {catalogo && catalogo.ok && (
+          <div className="mt-3 rounded-xl border border-success/30 bg-success-bg p-3 text-sm">
+            <p className="font-medium text-[#05834b]">
+              ✔ {catalogo.total} productos sincronizados — {catalogo.creados} nuevos,{" "}
+              {catalogo.actualizados} actualizados.
+            </p>
+            {catalogo.listasDePrecio.length > 0 && (
+              <p className="mt-1 text-text-soft">
+                Listas de precio encontradas en Siigo: {catalogo.listasDePrecio.join(", ")}.
+              </p>
+            )}
+            {/* Los precios se emparejan por el NOMBRE de la lista en Siigo. Si
+                se llaman distinto, hay que revisarlos: el producto entra igual
+                y se puede facturar, pero sin precio de partida. */}
+            {catalogo.sinPrecio > 0 && (
+              <p className="mt-1 text-[#b54708]">
+                ⚠ {catalogo.sinPrecio} quedaron sin precio porque no se reconoció ninguna lista.
+                Se pueden facturar igual; el precio se escribe en el pedido.
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* --------------------------------------------------- prueba de conexión */}

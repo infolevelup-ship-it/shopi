@@ -1018,6 +1018,45 @@ Decisiones de seguridad que sostienen el diseño:
 - [ ] GHL no tiene un interruptor equivalente. Sería el mismo patrón y es fácil de agregar; no se
       hizo porque no se pidió.
 
+## Catálogo de productos: sincronización desde Siigo
+
+Un producto sin `siigo_product_id` **no se puede facturar**, por más que exista en la plataforma.
+Los 15 productos de prueba que se habían sembrado no tenían ninguno.
+
+- [x] **Productos de prueba borrados** (los 15). Ninguno venía de Siigo, así que no se perdió nada
+      real. Las líneas de pedido y cotización **conservan sus instantáneas**
+      (`product_code_snapshot` / `product_name_snapshot`) y su referencia al producto es anulable,
+      así que se soltó la referencia y los 39 pedidos siguen legibles: es exactamente para lo que
+      esas columnas existen. Verificado después de borrar.
+- [x] **`syncProductCatalogAction()`** — trae el catálogo completo de Siigo (paginado, con tope de
+      páginas como red de seguridad contra un bucle) y lo deja en `products` emparejando por
+      código: id de Siigo, nombre, activo, impuesto, unidad, precios e inventario. Botón en
+      `/configuracion`, solo ADMIN, y respeta el corte de emergencia.
+- [x] Escribe con **service role** porque `products` no tiene política de UPDATE — quinto caso del
+      mismo patrón. Desde el cliente un upsert sobre una fila existente no daría error: no
+      actualizaría nada.
+- [x] Conserva el `id` de la fila existente al actualizar, para no romper referencias.
+- [x] El resumen queda en `audit_logs` (`integration_logs` no tiene un campo libre para el
+      payload): cuántos entraron, cuántos nuevos, y **qué listas de precio se encontraron**.
+
+Sobre los precios, que es la parte que puede quedar mal:
+
+- Las tres listas (`price_public` / `price_professional` / `price_salon`) se emparejan por el
+  **nombre** de la lista en Siigo, con pistas ("público/general/detal", "profesional/estilista",
+  "salón/mayorista/distribuidor"). **No por posición**, a propósito: si alguien reordena las listas
+  en Siigo, la posición cambia y los precios quedarían cruzados sin ningún error visible.
+- Si no se reconoce ninguna, se usa la primera como precio público, y la pantalla dice cuántos
+  productos quedaron así. **No bloquea nada**: el precio real lo pone la vendedora en el pedido, y
+  para facturar lo que hace falta es el id de Siigo y el impuesto, no el precio de catálogo.
+- La pantalla lista los nombres de lista encontrados después de sincronizar, para poder ajustar las
+  pistas si en la cuenta se llaman distinto.
+
+- [ ] **Falta ejecutarlo.** El catálogo está vacío hasta que se redespliegue en Vercel, se encienda
+      la conexión y se pulse "Sincronizar catálogo". No se pudo correr desde estas sesiones porque
+      su red bloquea `api.siigo.com`.
+- [ ] La forma exacta de `/v1/products` (paginación, `prices[].price_list[]`, `unit`) sigue sin
+      verificarse contra la API real, como el resto del cliente de Siigo.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in

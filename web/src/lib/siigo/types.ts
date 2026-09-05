@@ -27,6 +27,18 @@ export type SiigoProduct = {
   available_quantity?: number;
   warehouses?: SiigoWarehouseStock[];
   taxes?: { id: number; name: string; type: string; percentage: number }[];
+  unit?: { code?: string; name?: string };
+  unit_label?: string;
+  /** Siigo agrupa por moneda y dentro trae las listas de precio con nombre. */
+  prices?: {
+    currency_code?: string;
+    price_list?: { position?: number; name?: string; value?: number }[];
+  }[];
+};
+
+export type SiigoProductListResponse = {
+  pagination?: { page?: number; page_size?: number; total_results?: number };
+  results?: SiigoProduct[];
 };
 
 export type SiigoFiscalResponsibility = { code: string; name?: string };
