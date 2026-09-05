@@ -28,9 +28,13 @@ perderse en el chat. Se resuelve al final de cada fase o cuando se decida explí
       `document_type -> id_type` (NIT 31, CC 13, CE 22, PAS 41, TI 12 — catálogo público DIAN/Siigo,
       no específico de la cuenta) sea aceptado sin 4xx.
 - [ ] Antes de poder facturar un solo pedido real: configurar `app_settings.siigo_payment_types` y
-      `app_settings.siigo_tax_ids` con los ids reales de Siigo (ver § Fase 8 abajo para el SQL
-      exacto) — hoy no existen esos datos, `InvoiceService` fallará con un error claro hasta que se
-      configuren.
+      `app_settings.siigo_tax_ids` con los ids reales de Siigo — hoy no existen esos datos,
+      `InvoiceService` fallará con un error claro hasta que se configuren.
+      **Hay un script que los saca solo**: `node web/scripts/siigo-ids.mjs` con las tres
+      credenciales en el entorno consulta la cuenta e imprime el SQL listo para pegar. También
+      sirve como la primera prueba real de que la autenticación funciona, que es justo lo que esta
+      sesión no pudo verificar. El emparejamiento de formas de pago lo hace por nombre y hay que
+      revisarlo; los impuestos sí los resuelve por porcentaje, sin ambigüedad.
 - [ ] Pegar `GHL_PRIVATE_TOKEN` / `GHL_LOCATION_ID` / `GHL_WEBHOOK_SECRET` reales en `web/.env.local`
       (y luego en Vercel) — variables ya reservadas desde la Fase 1, ahora en uso (Fase 9,
       `web/src/lib/ghl/client.ts`). Igual que con Siigo: nunca las pegues en un mensaje que yo vaya
