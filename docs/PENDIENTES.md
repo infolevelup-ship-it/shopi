@@ -27,14 +27,9 @@ perderse en el chat. Se resuelve al final de cada fase o cuando se decida explí
       `/auth`, `/v1/customers` (búsqueda y creación) y `/v1/products/{id}`, y que el mapeo
       `document_type -> id_type` (NIT 31, CC 13, CE 22, PAS 41, TI 12 — catálogo público DIAN/Siigo,
       no específico de la cuenta) sea aceptado sin 4xx.
-- [ ] Antes de poder facturar un solo pedido real: configurar `app_settings.siigo_payment_types` y
-      `app_settings.siigo_tax_ids` con los ids reales de Siigo — hoy no existen esos datos,
-      `InvoiceService` fallará con un error claro hasta que se configuren.
-      **Hay un script que los saca solo**: `node web/scripts/siigo-ids.mjs` con las tres
-      credenciales en el entorno consulta la cuenta e imprime el SQL listo para pegar. También
-      sirve como la primera prueba real de que la autenticación funciona, que es justo lo que esta
-      sesión no pudo verificar. El emparejamiento de formas de pago lo hace por nombre y hay que
-      revisarlo; los impuestos sí los resuelve por porcentaje, sin ambigüedad.
+- [x] `app_settings.siigo_tax_ids`, `siigo_payment_types` y `siigo_cost_center` — **configurados**
+      con los ids reales de la cuenta (ver § Configuración de Siigo aplicada, abajo).
+      Sigue disponible `node web/scripts/siigo-ids.mjs` para volver a sacarlos si cambian.
 - [ ] Pegar `GHL_PRIVATE_TOKEN` / `GHL_LOCATION_ID` / `GHL_WEBHOOK_SECRET` reales en `web/.env.local`
       (y luego en Vercel) — variables ya reservadas desde la Fase 1, ahora en uso (Fase 9,
       `web/src/lib/ghl/client.ts`). Igual que con Siigo: nunca las pegues en un mensaje que yo vaya
@@ -930,6 +925,57 @@ Diferencias deliberadas que quedan con Siigo:
       cambiarlo desalinearía todos los demás botones del producto.
 - [ ] La lista de motivos, catálogos y etiquetas vive en código (`src/lib/ui/fiscal.ts`). Cambiar
       un valor después de cargar clientes reales obliga a migrar los ya guardados.
+
+## Configuración de Siigo aplicada (ids reales de la cuenta)
+
+Los ids los obtuvo el usuario desde una sesión con salida de red hacia `api.siigo.com`. Quedaron
+escritos en `app_settings`:
+
+- `siigo_tax_ids` → `{"0": 21164, "5": 2951, "19": 2950}`. Sin ambigüedad: emparejados por
+  porcentaje.
+- `siigo_cost_center` → `86` (PÚBLICO). La cuenta también tiene 1048 SALÓN DE BELLEZA, 1049
+  ESTILISTA INDEPENDIENTE y 1050 TIENDAS (inactivo), hoy sin usar.
+- `siigo_payment_types` → ver abajo.
+- `siigo_seller_map` → **no se pudo llenar**: la tabla `users` solo tiene los 4 usuarios de prueba
+  y el admin. Hay que crearlo cuando existan las vendedoras reales. Los ids de Siigo ya se
+  conocen: Karina Noriega 3375, Ivonne Daza 142, Melissa 3651, Sandra Ayala 3565, Carlos
+  (Logística) 1826.
+
+Dos huecos reales del `InvoiceService` que salieron al configurar esto, ya corregidos:
+
+1. **El medio de pago se ignoraba al facturar.** Siigo no separa "a cuántos días se paga" de "por
+   dónde entró la plata": sus tipos de pago **son** el medio (Efectivo, Bancolombia, Bold) más un
+   "Crédito" genérico. Nosotros sí lo guardamos en dos campos (`payment_method` +
+   `payment_method_detail`), y el servicio solo miraba el primero — así que **toda venta de
+   contado habría salido como efectivo en los informes de Siigo, aunque hubiera entrado por
+   transferencia o datáfono**. Ahora en las ventas de contado manda el medio concreto.
+2. **Las ventas a crédito salían sin fecha de vencimiento.** El plazo en Siigo no es un id
+   distinto por cada número de días: es un único "Crédito" (1262) más la fecha de vencimiento del
+   pago, que nunca se estaba enviando. Una factura a 30 días se habría emitido venciendo el mismo
+   día. Ahora `credito_30` se traduce a vencimiento = fecha de emisión + 30 días.
+
+Mapa aplicado, con las dos decisiones que lo sostienen:
+
+| Lo nuestro | Id de Siigo | Por qué |
+|---|---|---|
+| `efectivo` | 1261 Efectivo | directo |
+| `transferencia` | 1264 Bancolombia | ver decisión A |
+| `datafono` | 37560 Bold | directo |
+| `contado` (sin medio) | 1261 Efectivo | respaldo cuando no se especificó |
+| `contra_entrega` | 1261 Efectivo | ver decisión B |
+| `credito_15/30/45/60` | 1262 Crédito | el plazo va en la fecha de vencimiento |
+
+- **Decisión A — transferencia = Bancolombia.** No se creó un tipo genérico "Transferencia" en
+  Siigo a propósito: el tipo de pago alimenta la conciliación bancaria, así que nombrar el banco
+  real es *más* preciso, no menos. Si Productos WOW recibe transferencias en más de un banco, lo
+  correcto es crear un tipo por banco en Siigo y agregarlos aquí.
+- **Decisión B — contra entrega = Efectivo.** "Contra entrega" no es un medio de pago sino un
+  acuerdo de entrega; la plata igual llega como efectivo. **Queda abierto**: como la factura se
+  emite al aprobar y el dinero entra al entregar, un contador podría querer tratarlo como crédito
+  a pocos días (1262 con vencimiento). Es una decisión contable de Productos WOW.
+
+- [ ] **Nequi y Daviplata no tienen tipo propio en Siigo** y hoy caen en Efectivo (1261). Si se
+      quieren separados en los informes, hay que crear esos tipos en Siigo y agregarlos al mapa.
 
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 

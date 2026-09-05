@@ -289,6 +289,8 @@ export type SiigoInvoiceOrderInput = {
   siigoCustomerId: string;
   costCenter: number;
   paymentTypeId: number;
+  /** Plazo en días de una venta a crédito; se traduce a la fecha de vencimiento del pago. */
+  creditDays?: number;
   sellerSiigoId?: number;
   items: SiigoInvoiceOrderItemInput[];
 };
@@ -297,6 +299,12 @@ export type SiigoInvoiceOrderInput = {
 // impuesto/forma de pago/centro de costo ya buscados por el llamador —
 // esta función no toca la base de datos, solo arma el JSON, para poder
 // probarla sola sin red ni Supabase, igual que buildSiigoCustomerPayload).
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
 export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoInvoiceCreatePayload {
   const retentionId = getSiigoRetentionId(input.retentionPercent);
 
@@ -314,7 +322,15 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
       discount: item.discountValue || undefined,
       taxes: item.siigoTaxId ? [{ id: item.siigoTaxId }] : undefined,
     })),
-    payments: [{ id: input.paymentTypeId, value: input.grandTotal }],
+    payments: [
+      {
+        id: input.paymentTypeId,
+        value: input.grandTotal,
+        ...(input.creditDays
+          ? { due_date: addDays(new Date(), input.creditDays).toISOString().slice(0, 10) }
+          : {}),
+      },
+    ],
   };
 
   if (input.sellerSiigoId) payload.seller = input.sellerSiigoId;

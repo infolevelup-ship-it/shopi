@@ -89,7 +89,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
     .update({ status: "INVOICING", invoicing_started_at: new Date().toISOString() })
     .eq("id", orderId)
     .eq("status", "APPROVED_FOR_INVOICE")
-    .select("id, order_number, customer_id, seller_id, grand_total, retention_percent, payment_method")
+    .select("id, order_number, customer_id, seller_id, grand_total, retention_percent, payment_method, payment_method_detail")
     .maybeSingle();
 
   if (!claimed) {
@@ -135,12 +135,30 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
     const taxIds = (settings.get("siigo_tax_ids") as Record<string, number> | undefined) ?? {};
     const sellerMap = (settings.get("siigo_seller_map") as Record<string, number> | undefined) ?? {};
 
-    const paymentTypeId = claimed.payment_method ? paymentTypes[claimed.payment_method] : undefined;
+    // Siigo no separa "a cuántos días se paga" de "por dónde entró la plata":
+    // sus tipos de pago SON el medio (Efectivo, Bancolombia, Bold) más un
+    // "Crédito" genérico, y el plazo va aparte en la fecha de vencimiento.
+    // Nosotros sí lo guardamos en dos campos, así que en las ventas de contado
+    // manda el medio concreto — si no, todas saldrían como efectivo en los
+    // informes de Siigo aunque hayan entrado por transferencia.
+    const paymentKey =
+      claimed.payment_method === "contado" &&
+      claimed.payment_method_detail &&
+      paymentTypes[claimed.payment_method_detail as string] != null
+        ? (claimed.payment_method_detail as string)
+        : (claimed.payment_method as string | null);
+
+    const paymentTypeId = paymentKey ? paymentTypes[paymentKey] : undefined;
     if (!paymentTypeId) {
       throw new InvoiceValidationError(
-        `Falta configurar el id de Siigo para la forma de pago "${claimed.payment_method}" en app_settings.siigo_payment_types`,
+        `Falta configurar el id de Siigo para la forma de pago "${paymentKey}" en app_settings.siigo_payment_types`,
       );
     }
+
+    // "credito_30" -> 30 días. El plazo viaja como fecha de vencimiento del
+    // pago, que es como Siigo lo espera; sin esto una factura a 30 días se
+    // emitiría con vencimiento el mismo día.
+    const creditDays = Number(/^credito_(\d+)$/.exec(claimed.payment_method ?? "")?.[1] ?? 0);
 
     const itemInputs: SiigoInvoiceOrderItemInput[] = [];
     const missingProducts: string[] = [];
@@ -185,6 +203,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       siigoCustomerId: customer.siigo_customer_id,
       costCenter,
       paymentTypeId,
+      creditDays: creditDays > 0 ? creditDays : undefined,
       sellerSiigoId: sellerMap[claimed.seller_id as string],
       items: itemInputs,
     });
