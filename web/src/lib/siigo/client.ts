@@ -288,6 +288,8 @@ export type SiigoInvoiceOrderInput = {
   retentionPercent: number;
   siigoCustomerId: string;
   costCenter: number;
+  /** Tipo de documento a emitir. Configurable para poder probar contra uno no electrónico. */
+  documentTypeId: number;
   paymentTypeId: number;
   /** Plazo en días de una venta a crédito; se traduce a la fecha de vencimiento del pago. */
   creditDays?: number;
@@ -309,7 +311,7 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
   const retentionId = getSiigoRetentionId(input.retentionPercent);
 
   const payload: SiigoInvoiceCreatePayload = {
-    document: { id: SIIGO_INVOICE_DOCUMENT_TYPE_ID },
+    document: { id: input.documentTypeId },
     date: new Date().toISOString().slice(0, 10),
     customer: { id: input.siigoCustomerId },
     cost_center: input.costCenter,

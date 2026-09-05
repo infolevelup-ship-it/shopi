@@ -2680,6 +2680,22 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_app_setting: {
+        Args: { p_key: string; p_value: Json }
+        Returns: {
+          id: string
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "app_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       start_order_review: {
         Args: { p_order_id: string }
         Returns: {

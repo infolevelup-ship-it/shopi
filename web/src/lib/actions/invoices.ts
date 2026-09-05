@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { INTEGRATION_KEYS, parseIntegrationSettings } from "@/lib/integrations/settings";
 import { getCurrentProfile } from "@/lib/auth";
 import type { Json } from "@/lib/supabase/database.types";
 import {
@@ -80,6 +81,19 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
   const supabase = await createClient();
   const serviceClient = createServiceRoleClient();
 
+  // El corte de emergencia se comprueba ANTES de reclamar el pedido: si se
+  // comprobara después, el pedido quedaría marcado como INVOICING sin que
+  // nadie lo esté facturando, y habría que rescatarlo a mano.
+  const cortes = parseIntegrationSettings(
+    await readAppSettings(serviceClient, INTEGRATION_KEYS),
+  );
+  if (!cortes.siigoEnabled) {
+    return {
+      ok: false,
+      error: "La integración con Siigo está desconectada. Se enciende en Configuración.",
+    };
+  }
+
   // Reclamar atómicamente: solo avanza si el pedido sigue APPROVED_FOR_INVOICE.
   // Esto es lo que evita doble clic / dos personas facturando a la vez
   // (doc 06 §20 los lista como pruebas obligatorias) — un UPDATE con WHERE
@@ -129,7 +143,9 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       "siigo_payment_types",
       "siigo_tax_ids",
       "siigo_seller_map",
+      ...INTEGRATION_KEYS,
     ]);
+    const integraciones = parseIntegrationSettings(settings);
     const costCenter = (settings.get("siigo_cost_center") as number | undefined) ?? DEFAULT_COST_CENTER;
     const paymentTypes = (settings.get("siigo_payment_types") as Record<string, number> | undefined) ?? {};
     const taxIds = (settings.get("siigo_tax_ids") as Record<string, number> | undefined) ?? {};
@@ -202,6 +218,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       retentionPercent: Number(claimed.retention_percent),
       siigoCustomerId: customer.siigo_customer_id,
       costCenter,
+      documentTypeId: integraciones.invoiceDocumentId,
       paymentTypeId,
       creditDays: creditDays > 0 ? creditDays : undefined,
       sellerSiigoId: sellerMap[claimed.seller_id as string],

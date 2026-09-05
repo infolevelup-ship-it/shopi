@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getCurrentProfile } from "@/lib/auth";
+import { getIntegrationSettings } from "@/lib/actions/integrations";
 import {
   findSiigoCustomersByIdentification,
   createSiigoCustomer,
@@ -30,6 +31,16 @@ export async function syncCustomerToSiigoAction(customerId: string): Promise<Cus
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== "ADMIN") {
     return { ok: false, error: "Solo un administrador puede sincronizar con Siigo (doc 05 §5)" };
+  }
+
+  // El corte de emergencia se comprueba en el servidor, no escondiendo el
+  // botón: si está apagado, no sale nada hacia Siigo venga de donde venga.
+  const integraciones = await getIntegrationSettings();
+  if (!integraciones.siigoEnabled) {
+    return {
+      ok: false,
+      error: "La integración con Siigo está desconectada. Se enciende en Configuración.",
+    };
   }
 
   const supabase = await createClient();
@@ -121,6 +132,17 @@ export async function syncOrderProductStockAction(orderId: string): Promise<Stoc
   const profile = await getCurrentProfile();
   if (!profile || !["WAREHOUSE", "SUPERVISOR", "ADMIN"].includes(profile.role)) {
     return { ok: false, error: "Solo bodega/supervisor/admin puede actualizar stock" };
+  }
+
+  // Dos interruptores: el corte general y el propio de inventarios. Así se
+  // puede dejar la facturación viva y apagar solo el inventario, que es lo
+  // que más se consulta y lo primero que satura la cuota de la API.
+  const integraciones = await getIntegrationSettings();
+  if (!integraciones.siigoEnabled) {
+    return { ok: false, error: "La integración con Siigo está desconectada. Se enciende en Configuración." };
+  }
+  if (!integraciones.stockSyncEnabled) {
+    return { ok: false, error: "La actualización de inventarios está apagada en Configuración." };
   }
 
   const supabase = await createClient();

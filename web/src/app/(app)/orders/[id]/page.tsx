@@ -14,6 +14,7 @@ import { customerDisplayName, formatMoney } from "@/lib/ui/format";
 import { EDITABLE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, labelOf } from "@/lib/ui/fiscal";
 import { listOrderReceipts } from "@/lib/actions/receipts";
+import { getIntegrationSettings } from "@/lib/actions/integrations";
 
 function Condition({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
@@ -97,6 +98,10 @@ export default async function OrderDetailPage({
   // revisado es la prueba de que el pago entró. Estas dos condiciones son las
   // mismas que aplica la base de datos.
   const receipts = await listOrderReceipts(order.id);
+  // Quien va a facturar tiene que ver el estado de la integración justo ahí,
+  // no en otra pantalla: emitir en modo de pruebas sin saberlo produce un
+  // documento que no llega a la DIAN.
+  const integraciones = await getIntegrationSettings();
   const canUploadReceipts =
     !!profile && order.status !== "CANCELLED" && order.status !== "INVOICED";
   const canDeleteReceipts =
@@ -355,6 +360,28 @@ export default async function OrderDetailPage({
         {isReviewer && customer && <FiscalCard customer={customer} />}
 
         {canReview && <OrderReviewPanel orderId={order.id} />}
+
+        {(order.status === "APPROVED_FOR_INVOICE" ||
+          order.status === "INVOICING" ||
+          order.status === "INVOICED") &&
+          isReviewer &&
+          !integraciones.siigoEnabled && (
+            <Callout tone="danger" title="Siigo está desconectado">
+              Nadie puede facturar mientras la integración esté apagada. Un administrador la
+              enciende en Configuración.
+            </Callout>
+          )}
+
+        {(order.status === "APPROVED_FOR_INVOICE" || order.status === "INVOICING") &&
+          isReviewer &&
+          integraciones.siigoEnabled &&
+          integraciones.isTestDocument && (
+            <Callout tone="danger" title="⚠ MODO DE PRUEBAS ACTIVO">
+              Este pedido se va a emitir como <strong>documento de ingreso</strong>, que{" "}
+              <strong>no llega a la DIAN</strong> y no sirve como factura legal. Si es una venta
+              real, hay que cambiarlo en Configuración antes de facturar.
+            </Callout>
+          )}
 
         {(order.status === "APPROVED_FOR_INVOICE" ||
           order.status === "INVOICING" ||

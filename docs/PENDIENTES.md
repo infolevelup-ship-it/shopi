@@ -977,6 +977,47 @@ Mapa aplicado, con las dos decisiones que lo sostienen:
 - [ ] **Nequi y Daviplata no tienen tipo propio en Siigo** y hoy caen en Efectivo (1261). Si se
       quieren separados en los informes, hay que crear esos tipos en Siigo y agregarlos al mapa.
 
+## Panel de configuración: interruptores de la integración
+
+Pedido del usuario: poder cortar el envío a Siigo en una urgencia, apagar solo los inventarios, y
+cambiar entre facturar de verdad y facturar contra un documento de prueba. Migración
+`0022_integration_switches.sql`, pantalla `/configuracion` (solo ADMIN).
+
+- [x] **Corte de emergencia** (`siigo_integration_enabled`). Con esto apagado no sale nada hacia
+      Siigo: ni clientes, ni inventarios, ni facturas. Se comprueba **en el servidor**, dentro de
+      cada acción, no escondiendo botones.
+- [x] **Inventarios por separado** (`siigo_stock_sync_enabled`), para poder dejar la facturación
+      viva y apagar solo lo que más consume la cuota de la API.
+- [x] **Tipo de documento** (`siigo_invoice_document_id`): 34963 factura electrónica real, o 37934
+      documento de ingreso, que **no es electrónico y no llega a la DIAN** — es lo más parecido a
+      un modo de pruebas que ofrece Siigo, que no tiene uno propio. Antes estaba fijo en el código.
+- [x] **Prueba de conexión** que solo autentica y lee el catálogo de documentos. No escribe nada,
+      así que funciona con la integración apagada — que es justo cuando sirve, para saber si ya se
+      puede reconectar. Es además la forma de verificar que **Vercel** llega a `api.siigo.com`,
+      distinto de que lleguen las credenciales desde un computador.
+- [x] Probado con sesiones JWT reales: 7 casos (admin enciende, se rechaza el texto `"true"` en vez
+      del booleano, se rechaza el id de documento como texto, cambio a documento de pruebas, queda
+      en la bitácora, una vendedora no puede tocarlo, una vendedora sí puede leerlo).
+- [x] Verificado en navegador en los dos estados: desconectado y en modo de pruebas.
+
+Decisiones de seguridad que sostienen el diseño:
+
+- **Arranca desconectado.** Si la clave no existe, la integración está apagada. Conectarse tiene
+  que ser un acto deliberado.
+- **El documento por defecto es el REAL.** Al revés sería peor: una prueba emitida como factura de
+  verdad se ve y se anula, pero una venta real emitida como documento de ingreso no llega a la
+  DIAN y nadie se entera hasta la declaración.
+- **El modo de pruebas se grita, no se insinúa.** Aviso rojo permanente en el panel y otro junto al
+  botón de facturar en el pedido, porque quien factura es bodega y no entra a Configuración.
+- **Los interruptores viven en `app_settings`, no en variables de entorno.** Una variable exige
+  redespliegue, y en una urgencia eso son minutos en los que se siguen mandando documentos.
+- `set_app_setting` va `security definer` porque `audit_logs` **no tiene política de INSERT** —
+  cuarto caso del mismo patrón (quotes, attachments, prospects). Desde una función invoker el
+  registro de auditoría no daría error: simplemente no escribiría nada.
+
+- [ ] GHL no tiene un interruptor equivalente. Sería el mismo patrón y es fácil de agregar; no se
+      hizo porque no se pidió.
+
 ## Decisiones técnicas tomadas que vale la pena recordar (no son pendientes, son contexto)
 
 - `docs/SQL_MODELO_DE_DATOS_SUPABASE.sql` es el estado actual completo del esquema (se edita in
