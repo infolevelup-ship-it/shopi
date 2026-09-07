@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { getProductsByIds } from "@/lib/actions/products";
+import { precioDeLista } from "@/lib/ui/precios";
 import { OrderForm, type OrderFormLine } from "@/components/order-form";
 import type { PriceList } from "@/lib/ui/fiscal";
 import { EDITABLE_ORDER_STATUSES } from "@/lib/ui/status";
@@ -62,7 +63,13 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
           salon: p?.price_salon ?? null,
         },
         quantity: Number(i.quantity),
-        unitPrice: Number(i.unit_price),
+        // El precio guardado puede ser de antes de que mandara el catálogo, o
+        // el producto pudo cambiar de precio. Al guardar, el servidor usa el
+        // del catálogo: si aquí se mostrara el viejo, la vendedora vería un
+        // total y se guardaría otro.
+        unitPrice: p
+          ? (precioDeLista(p, order.price_list) ?? Number(i.unit_price))
+          : Number(i.unit_price),
         discountPercent: Number(i.discount_percent ?? 0),
       };
     });

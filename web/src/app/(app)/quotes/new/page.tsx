@@ -10,10 +10,11 @@ import {
 import { searchProducts, type ProductSearchResult } from "@/lib/actions/products";
 import { createQuoteAction, type QuoteItemInput } from "@/lib/actions/quotes";
 import { PageHeader } from "@/components/ui";
-import { SCard, SNumber, SSelect, SText, STextarea } from "@/components/siigo-fields";
+import { SCard, SNumber, SSelect, SStatic, SText, STextarea } from "@/components/siigo-fields";
 import { customerDisplayName, formatMoney } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
 import { PRICE_LISTS, type PriceList } from "@/lib/ui/fiscal";
+import { precioDeLista, precioSospechoso } from "@/lib/ui/precios";
 
 const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => ({
   value,
@@ -23,7 +24,9 @@ const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]
 // Las mismas tasas verificadas contra Siigo que usa el pedido: una
 // cotización que promete un total con una retención inexistente termina en
 // una factura que no cuadra con lo cotizado.
-const RETENTION_RATES = [0, 1, 2, 2.5, 3.5, 4, 6, 7, 11];
+// Mismas tarifas que el pedido: solo 2,5%, que es la única que usa
+// Productos WOW, más el 0 para clientes que no son agentes retenedores.
+const RETENTION_RATES = [0, 2.5];
 
 type Line = QuoteItemInput & {
   key: string;
@@ -33,12 +36,6 @@ type Line = QuoteItemInput & {
   // consultar el producto.
   prices: Record<PriceList, number | null>;
 };
-
-function priceFor(p: ProductSearchResult, list: PriceList) {
-  if (list === "profesional") return p.price_professional;
-  if (list === "salon") return p.price_salon;
-  return p.price_public;
-}
 
 function lineTotal(line: Line) {
   const subtotal = line.quantity * line.unitPrice;
@@ -115,7 +112,7 @@ function NewQuoteForm() {
           salon: p.price_salon,
         },
         quantity: 1,
-        unitPrice: priceFor(p, priceList) ?? p.price_public ?? 0,
+        unitPrice: precioDeLista(p, priceList) ?? 0,
         discountPercent: 0,
       },
     ]);
@@ -127,8 +124,15 @@ function NewQuoteForm() {
     setPriceList(list);
     setLines((ls) =>
       ls.map((l) => {
-        const next = l.prices[list];
-        // Un producto sin precio en esa lista conserva el que ya tenía.
+        const next = precioDeLista(
+          {
+            price_public: l.prices.publico,
+            price_professional: l.prices.profesional,
+            price_salon: l.prices.salon,
+          },
+          list,
+        );
+        // Mismo criterio que el servidor, caída a la lista pública incluida.
         return next === null ? l : { ...l, unitPrice: next };
       }),
     );
@@ -195,8 +199,9 @@ function NewQuoteForm() {
             options={PRICE_LISTS.map((p) => ({ value: p.value, label: p.label }))}
           />
           <p className="s-note mt-1">
-            Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Si
-            editaste un precio a mano, se pierde ese cambio.
+            Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Los
+            precios salen del catálogo y no se editan a mano; para bajar un precio, usa el
+            descuento.
           </p>
         </SCard>
 
@@ -271,7 +276,7 @@ function NewQuoteForm() {
                       <span className="block text-sm text-text-soft">{p.code}</span>
                     </span>
                     <span className="font-medium whitespace-nowrap">
-                      {formatMoney(priceFor(p, priceList) ?? p.price_public)}
+                      {formatMoney(precioDeLista(p, priceList))}
                     </span>
                   </button>
                 ))}
@@ -308,13 +313,11 @@ function NewQuoteForm() {
                     value={l.quantity}
                     onChange={(v) => updateLine(l.key, { quantity: v })}
                   />
-                  <SNumber
-                    id={`price-${l.key}`}
+                  {/* Igual que en el pedido: el precio lo pone el catálogo. */}
+                  <SStatic
                     label="Precio"
-                    min="0"
-                    step="1"
-                    value={l.unitPrice}
-                    onChange={(v) => updateLine(l.key, { unitPrice: v })}
+                    value={formatMoney(l.unitPrice)}
+                    tone={precioSospechoso(l.unitPrice) ? "danger" : "normal"}
                   />
                   <SNumber
                     id={`disc-${l.key}`}
@@ -326,6 +329,13 @@ function NewQuoteForm() {
                     onChange={(v) => updateLine(l.key, { discountPercent: v })}
                   />
                 </div>
+                {precioSospechoso(l.unitPrice) && (
+                  <p className="mt-2 text-xs font-semibold text-danger">
+                    ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}. En Siigo quedó un precio de
+                    relleno en esta lista. Cotizar así compromete ese valor con el cliente.
+                  </p>
+                )}
+
                 {/* Mismo aviso que en el pedido: en Siigo no todos los
                     productos tienen las tres listas cargadas. */}
                 {l.prices[priceList] === null && (

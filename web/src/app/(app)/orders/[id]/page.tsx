@@ -11,6 +11,7 @@ import { FiscalCard } from "./fiscal-card";
 import { ReceiptsPanel } from "./receipts-panel";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatMoney, formatNumber } from "@/lib/ui/format";
+import { precioSospechoso } from "@/lib/ui/precios";
 import { EDITABLE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, labelOf } from "@/lib/ui/fiscal";
 import { listOrderReceipts } from "@/lib/actions/receipts";
@@ -256,7 +257,17 @@ export default async function OrderDetailPage({
                         <div className="text-xs text-text-soft">{item.product_code_snapshot}</div>
                       </td>
                       <td className="text-right">{item.quantity}</td>
-                      <td className="text-right">{formatMoney(item.unit_price)}</td>
+                      <td className="text-right">
+                        {precioSospechoso(item.unit_price) ? (
+                          // Último filtro antes de facturar: si esto pasa, sale
+                          // una factura electrónica por ese valor.
+                          <span className="font-semibold text-danger">
+                            {formatMoney(item.unit_price)} ⚠
+                          </span>
+                        ) : (
+                          formatMoney(item.unit_price)
+                        )}
+                      </td>
                       {isReviewer && (
                         <td
                           className={`text-right ${short ? "font-semibold text-danger" : "text-text-soft"}`}
@@ -287,8 +298,15 @@ export default async function OrderDetailPage({
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-text-soft">{item.product_code_snapshot}</p>
-                  <p className="mt-1 text-sm text-text-soft">
+                  <p
+                    className={`mt-1 text-sm ${
+                      precioSospechoso(item.unit_price)
+                        ? "font-semibold text-danger"
+                        : "text-text-soft"
+                    }`}
+                  >
                     {item.quantity} × {formatMoney(item.unit_price)}
+                    {precioSospechoso(item.unit_price) ? " ⚠" : ""}
                   </p>
                   {isReviewer && (
                     <p className={`mt-1 text-sm ${short ? "font-medium text-danger" : "text-text-soft"}`}>

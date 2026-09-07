@@ -156,6 +156,34 @@ export function SNumber({
   );
 }
 
+/**
+ * Un dato que se muestra con la misma pinta que un campo pero no se edita.
+ * Se usa para el precio: viene del catálogo y el servidor lo impone, así que
+ * un input deshabilitado sería mentir sobre lo que se puede hacer.
+ */
+export function SStatic({
+  label,
+  value,
+  tone = "normal",
+  className = "",
+}: {
+  label: string;
+  value: string;
+  tone?: "normal" | "danger";
+  className?: string;
+}) {
+  return (
+    <div className={`s-field s-field--filled ${className}`}>
+      <output
+        className={`s-static ${tone === "danger" ? "text-danger font-semibold" : ""}`}
+      >
+        {value}
+      </output>
+      <label>{label}</label>
+    </div>
+  );
+}
+
 export function STextarea({
   id,
   label,

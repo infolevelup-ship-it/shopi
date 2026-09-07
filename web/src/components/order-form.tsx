@@ -15,8 +15,9 @@ import {
   type OrderItemInput,
 } from "@/lib/actions/orders";
 import { PageHeader } from "@/components/ui";
-import { SCard, SNumber, SSelect, STextarea } from "@/components/siigo-fields";
+import { SCard, SNumber, SSelect, SStatic, STextarea } from "@/components/siigo-fields";
 import { customerDisplayName, formatMoney, formatNumber } from "@/lib/ui/format";
+import { precioDeLista, precioSospechoso } from "@/lib/ui/precios";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, type PriceList } from "@/lib/ui/fiscal";
 
@@ -29,7 +30,11 @@ const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]
 // se incluye a propósito: el formulario anterior la ofrecía pero no se
 // encontró en Siigo — ofrecerla aquí crearía pedidos que fallarían al
 // facturar en la Fase 7.
-const RETENTION_RATES = [0, 1, 2, 2.5, 3.5, 4, 6, 7, 11];
+// ReteICA: Productos WOW solo usa 2,5%. Tener las nueve tarifas de la tabla
+// del DIAN era una invitación a elegir la equivocada, y una retención mal
+// aplicada cambia lo que el cliente paga. El 0 se queda porque no todo cliente
+// es agente retenedor.
+const RETENTION_RATES = [0, 2.5];
 
 type Line = OrderItemInput & {
   key: string;
@@ -40,12 +45,6 @@ type Line = OrderItemInput & {
   // a consultar el producto cuando la vendedora cambia de lista.
   prices: Record<PriceList, number | null>;
 };
-
-function priceFor(p: ProductSearchResult, list: PriceList) {
-  if (list === "profesional") return p.price_professional;
-  if (list === "salon") return p.price_salon;
-  return p.price_public;
-}
 
 function lineNet(line: Line) {
   const subtotal = line.quantity * line.unitPrice;
@@ -148,9 +147,17 @@ export function OrderForm({
     setPriceList(list);
     setLines((ls) =>
       ls.map((l) => {
-        const next = l.prices[list];
-        // Un producto sin precio en esa lista conserva el que ya tenía: es
-        // mejor que ponerlo en cero y facturar gratis.
+        const next = precioDeLista(
+          {
+            price_public: l.prices.publico,
+            price_professional: l.prices.profesional,
+            price_salon: l.prices.salon,
+          },
+          list,
+        );
+        // Se re-tarifa con el mismo criterio del servidor, caída a la lista
+        // pública incluida. Antes se conservaba el precio anterior, que podía
+        // venir de otra lista: la pantalla mostraba uno y se guardaba otro.
         return next === null ? l : { ...l, unitPrice: next };
       }),
     );
@@ -193,7 +200,7 @@ export function OrderForm({
           salon: p.price_salon,
         },
         quantity: 1,
-        unitPrice: priceFor(p, priceList) ?? p.price_public ?? 0,
+        unitPrice: precioDeLista(p, priceList) ?? 0,
         discountPercent: 0,
       },
     ]);
@@ -306,8 +313,9 @@ export function OrderForm({
               options={PRICE_LISTS.map((p) => ({ value: p.value, label: p.label }))}
             />
             <p className="s-note mt-1">
-              Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Si
-              editaste un precio a mano, se pierde ese cambio.
+              Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Los
+              precios salen del catálogo y no se editan a mano; para bajar un precio, usa el
+              descuento.
             </p>
           </div>
         </SCard>
@@ -400,7 +408,7 @@ export function OrderForm({
                       </span>
                     </span>
                     <span className="font-medium whitespace-nowrap">
-                      {formatMoney(priceFor(p, priceList) ?? p.price_public)}
+                      {formatMoney(precioDeLista(p, priceList))}
                     </span>
                   </button>
                 ))}
@@ -437,13 +445,13 @@ export function OrderForm({
                         value={l.quantity}
                         onChange={(v) => updateLine(l.key, { quantity: v })}
                       />
-                      <SNumber
-                        id={`price-${l.key}`}
+                      {/* El precio no se escribe: lo pone el catálogo y el
+                          servidor lo impone, así que un campo editable
+                          prometería algo que no se puede hacer. */}
+                      <SStatic
                         label="Precio"
-                        min="0"
-                        step="1"
-                        value={l.unitPrice}
-                        onChange={(v) => updateLine(l.key, { unitPrice: v })}
+                        value={formatMoney(l.unitPrice)}
+                        tone={precioSospechoso(l.unitPrice) ? "danger" : "normal"}
                       />
                       <SNumber
                         id={`disc-${l.key}`}
@@ -460,6 +468,15 @@ export function OrderForm({
                         listas de precio. Sin este aviso, elegir "Salón" sobre un
                         producto que no la tiene dejaría el precio público sin que
                         nadie lo note, y se cotizaría de más. */}
+                    {precioSospechoso(l.unitPrice) && (
+                      <p className="mt-2 text-xs font-semibold text-danger">
+                        ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}. En Siigo este producto
+                        quedó con un precio de relleno en esta lista. Si lo facturas así, sale
+                        una factura electrónica por ese valor y solo se corrige con nota
+                        crédito. Consúltalo antes de enviar a bodega.
+                      </p>
+                    )}
+
                     {l.prices[priceList] === null && (
                       <p className="mt-2 text-xs font-medium text-warning">
                         ⚠ Este producto no tiene precio en la lista{" "}
