@@ -16,7 +16,7 @@ import {
 } from "@/lib/actions/orders";
 import { PageHeader } from "@/components/ui";
 import { SCard, SNumber, SSelect, STextarea } from "@/components/siigo-fields";
-import { customerDisplayName, formatMoney } from "@/lib/ui/format";
+import { customerDisplayName, formatMoney, formatNumber } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, type PriceList } from "@/lib/ui/fiscal";
 
@@ -396,7 +396,7 @@ export function OrderForm({
                       <span className="block truncate font-medium">{p.name}</span>
                       <span className="block text-sm text-text-soft">
                         {p.code}
-                        {p.stock_cache !== null ? ` · stock aprox. ${p.stock_cache}` : ""}
+                        {p.stock_cache !== null ? ` · stock aprox. ${formatNumber(p.stock_cache)}` : ""}
                       </span>
                     </span>
                     <span className="font-medium whitespace-nowrap">

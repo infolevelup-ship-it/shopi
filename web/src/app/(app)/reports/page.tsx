@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getReportsData, type ReportRange } from "@/lib/actions/reports";
-import { formatMoney } from "@/lib/ui/format";
+import { formatMoney, formatNumber } from "@/lib/ui/format";
 import { PageHeader, Section, StatTile } from "@/components/ui";
 
 function RankList({ rows }: { rows: { name: string; total: number }[] }) {
@@ -167,7 +167,7 @@ export default async function ReportsPage({
                 <span
                   className={`font-medium ${(p.stock ?? 0) <= 10 ? "text-warning" : "text-text"}`}
                 >
-                  {p.stock}
+                  {formatNumber(p.stock)}
                 </span>
               </div>
             ))}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getCurrentProfile } from "@/lib/auth";
 import { searchProducts } from "@/lib/actions/products";
-import { formatMoney } from "@/lib/ui/format";
+import { formatMoney, formatNumber } from "@/lib/ui/format";
 import { EmptyState, PageHeader, Tone_ } from "@/components/ui";
 import { SearchForm } from "@/components/search-form";
 
@@ -14,8 +14,8 @@ function StockCell({ stock }: { stock: number | null }) {
     return <span className="text-text-muted">sin datos</span>;
   }
   if (stock <= 0) return <Tone_ tone="danger">Agotado</Tone_>;
-  if (stock <= 10) return <Tone_ tone="warning">Quedan {stock}</Tone_>;
-  return <span className="text-text">{stock}</span>;
+  if (stock <= 10) return <Tone_ tone="warning">Quedan {formatNumber(stock)}</Tone_>;
+  return <span className="text-text">{formatNumber(stock)}</span>;
 }
 
 export default async function ProductsPage({

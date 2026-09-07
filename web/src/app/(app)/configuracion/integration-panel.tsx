@@ -270,6 +270,20 @@ export function IntegrationPanel({
                 precio se escribe en el pedido.
               </p>
             )}
+            {/* Estos dos sí son productos que se quedaron por fuera, así que se
+                dicen aparte y en tono de aviso: no aparecerán al armar un pedido. */}
+            {catalogo.descartados > 0 && (
+              <p className="mt-1 text-[#b54708]">
+                ⚠ {catalogo.descartados} productos de Siigo no se pudieron traer porque no tienen
+                código o nombre. Revísalos en Siigo y vuelve a sincronizar.
+              </p>
+            )}
+            {catalogo.duplicados > 0 && (
+              <p className="mt-1 text-[#b54708]">
+                ⚠ {catalogo.duplicados} productos comparten código con otro. Se guardó solo el
+                primero de cada código: hay que corregirlos en Siigo.
+              </p>
+            )}
           </div>
         )}
       </section>

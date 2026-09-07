@@ -10,7 +10,7 @@ import { GhlSyncStatus } from "./ghl-sync-status";
 import { FiscalCard } from "./fiscal-card";
 import { ReceiptsPanel } from "./receipts-panel";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
-import { customerDisplayName, formatMoney } from "@/lib/ui/format";
+import { customerDisplayName, formatMoney, formatNumber } from "@/lib/ui/format";
 import { EDITABLE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
 import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, labelOf } from "@/lib/ui/fiscal";
 import { listOrderReceipts } from "@/lib/actions/receipts";
@@ -261,7 +261,7 @@ export default async function OrderDetailPage({
                         <td
                           className={`text-right ${short ? "font-semibold text-danger" : "text-text-soft"}`}
                         >
-                          {stock === null ? "sin datos" : short ? `solo ${stock}` : stock}
+                          {stock === null ? "sin datos" : short ? `solo ${formatNumber(stock)}` : formatNumber(stock)}
                         </td>
                       )}
                       <td className="text-right font-medium">{formatMoney(item.line_total)}</td>
@@ -292,7 +292,7 @@ export default async function OrderDetailPage({
                   </p>
                   {isReviewer && (
                     <p className={`mt-1 text-sm ${short ? "font-medium text-danger" : "text-text-soft"}`}>
-                      Inventario: {stock === null ? "sin datos" : short ? `solo ${stock}` : stock}
+                      Inventario: {stock === null ? "sin datos" : short ? `solo ${formatNumber(stock)}` : formatNumber(stock)}
                     </p>
                   )}
                 </li>

@@ -16,6 +16,10 @@ export type CatalogSyncResult =
       sinPrecio: number;
       /** Tiene al menos un precio pero le falta alguna de las tres listas. */
       conListaIncompleta: number;
+      /** Venían de Siigo sin código o sin nombre: no se pueden guardar. */
+      descartados: number;
+      /** Códigos repetidos en Siigo: se guardó una sola vez cada uno. */
+      duplicados: number;
       listasDePrecio: string[];
     }
   | { ok: false; error: string };
@@ -137,13 +141,50 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
   // sincronización de stock.
   const serviceClient = createServiceRoleClient();
 
-  const { data: existentes } = await serviceClient.from("products").select("id, code");
+  const { data: existentes } = await serviceClient
+    .from("products")
+    .select("id, code, siigo_product_id");
   const idPorCodigo = new Map((existentes ?? []).map((p) => [p.code as string, p.id as string]));
+  // `siigo_product_id` también es único. Si en Siigo le cambian el código a un
+  // producto, buscarlo solo por código lo daría por nuevo y el insert chocaría
+  // contra products_siigo_id_uniq, tumbando el lote completo. El id de Siigo
+  // es el que no cambia, así que manda.
+  const idPorSiigo = new Map(
+    (existentes ?? []).map((p) => [p.siigo_product_id as string, p.id as string]),
+  );
+
+  // El upsert es atómico: un solo producto inservible tumba los cien. Y Postgres
+  // además falla con "ON CONFLICT DO UPDATE command cannot affect row a second
+  // time" si el mismo código viene dos veces en el lote. Ninguno de los dos
+  // errores dice qué producto lo causó, así que se filtran antes.
+  const vistos = new Set<string>();
+  let descartados = 0;
+  let duplicados = 0;
+  const utilizables: SiigoProduct[] = [];
+  for (const p of productos) {
+    if (!p.code || !p.name) {
+      descartados++;
+      continue;
+    }
+    if (vistos.has(p.code)) {
+      duplicados++;
+      continue;
+    }
+    vistos.add(p.code);
+    utilizables.push(p);
+  }
+
+  if (utilizables.length === 0) {
+    return {
+      ok: false,
+      error: `Siigo devolvió ${productos.length} productos pero ninguno tiene código y nombre.`,
+    };
+  }
 
   const listasVistas = new Set<string>();
   let sinPrecio = 0;
   let conListaIncompleta = 0;
-  const filas = productos.map((p) => {
+  const filas = utilizables.map((p) => {
     const { price_public, price_professional, price_salon, nombres, faltantes } = precios(p);
     nombres.forEach((n) => listasVistas.add(n));
     // Que a un producto le falte una lista NO es un fallo de la sincronización:
@@ -155,7 +196,10 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
     return {
       // Conservar el id existente hace que el upsert sea una actualización de
       // esa fila y no una fila nueva, que rompería las referencias de pedidos.
-      ...(idPorCodigo.has(p.code) ? { id: idPorCodigo.get(p.code) } : {}),
+      ...(() => {
+        const existente = idPorSiigo.get(String(p.id)) ?? idPorCodigo.get(p.code);
+        return existente ? { id: existente } : {};
+      })(),
       siigo_product_id: String(p.id),
       code: p.code,
       name: p.name,
@@ -201,6 +245,8 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
       actualizados: filas.length - creados,
       sin_precio: sinPrecio,
       con_lista_incompleta: conListaIncompleta,
+      descartados,
+      duplicados,
       listas_de_precio: [...listasVistas],
     },
   });
@@ -212,6 +258,8 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
     actualizados: filas.length - creados,
     sinPrecio,
     conListaIncompleta,
+    descartados,
+    duplicados,
     listasDePrecio: [...listasVistas],
   };
 }
