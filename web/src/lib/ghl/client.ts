@@ -89,6 +89,57 @@ export async function createGhlOpportunity(payload: GhlOpportunityCreatePayload)
   return data.opportunity;
 }
 
+export type GhlPipeline = {
+  id: string;
+  name: string;
+  stages: { id: string; name: string }[];
+};
+
+export type GhlUser = { id: string; name: string; email: string | null };
+
+/**
+ * Los embudos de la cuenta con sus etapas. Sirve para dos cosas: comprobar que
+ * el token y el locationId sirven (es una lectura, no escribe nada en GHL), y
+ * para que el panel liste los ids en vez de que alguien los copie a mano de la
+ * URL de GHL — que es de donde salen los errores de "el pedido cayó en el
+ * embudo equivocado".
+ */
+export async function listGhlPipelines(locationId: string): Promise<GhlPipeline[]> {
+  const res = await ghlFetch(
+    `/opportunities/pipelines?locationId=${encodeURIComponent(locationId)}`,
+    { method: "GET" },
+  );
+  if (!res.ok) {
+    throw new GhlApiError("Error leyendo los embudos de GHL", res.status, await safeText(res));
+  }
+  const data = (await res.json()) as {
+    pipelines?: { id: string; name: string; stages?: { id: string; name: string }[] }[];
+  };
+  return (data.pipelines ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    stages: (p.stages ?? []).map((e) => ({ id: e.id, name: e.name })),
+  }));
+}
+
+/** Los usuarios de la subcuenta, para poder asignarle la oportunidad a la vendedora. */
+export async function listGhlUsers(locationId: string): Promise<GhlUser[]> {
+  const res = await ghlFetch(`/users/?locationId=${encodeURIComponent(locationId)}`, {
+    method: "GET",
+  });
+  if (!res.ok) {
+    throw new GhlApiError("Error leyendo los usuarios de GHL", res.status, await safeText(res));
+  }
+  const data = (await res.json()) as {
+    users?: { id: string; name?: string; firstName?: string; lastName?: string; email?: string }[];
+  };
+  return (data.users ?? []).map((u) => ({
+    id: u.id,
+    name: u.name ?? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim(),
+    email: u.email ?? null,
+  }));
+}
+
 // Mismo catálogo público DIAN que usa Siigo (web/src/lib/siigo/client.ts)
 // — se duplica aquí a propósito, no se importa entre módulos de
 // integración: cada uno debe poder cambiar sin arrastrar al otro.

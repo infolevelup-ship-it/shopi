@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { getIntegrationSettings } from "@/lib/actions/integrations";
 import {
   buildGhlContactPayload,
   buildGhlOpportunityPayload,
@@ -19,13 +20,6 @@ import {
 // que se sincroniza automáticamente y en silencio (best-effort) en vez de
 // requerir un botón manual como con Siigo.
 
-type ServiceClient = ReturnType<typeof createServiceRoleClient>;
-
-async function readAppSetting<T>(serviceClient: ServiceClient, key: string): Promise<T | null> {
-  const { data } = await serviceClient.from("app_settings").select("value").eq("key", key).maybeSingle();
-  return (data?.value as T) ?? null;
-}
-
 export type GhlSyncResult = { ok: true; ghlId: string } | { ok: false; error: string };
 
 // doc 07 §3: "Al crear/actualizar cliente -> upsert GHL contact -> guardar
@@ -35,6 +29,13 @@ export type GhlSyncResult = { ok: true; ghlId: string } | { ok: false; error: st
 export async function syncCustomerToGhlAction(customerId: string): Promise<GhlSyncResult> {
   const supabase = await createClient();
   const serviceClient = createServiceRoleClient();
+
+  // Crear un contacto es escritura en GHL: el corte de emergencia también
+  // aplica aquí, no solo a las oportunidades.
+  const ajustes = await getIntegrationSettings();
+  if (!ajustes.ghlEnabled) {
+    return { ok: false, error: "La integración con GHL está desconectada." };
+  }
 
   const { data: customer } = await supabase
     .from("customers")
@@ -94,10 +95,17 @@ export async function syncOrderToGhlAction(orderId: string): Promise<GhlSyncResu
   const supabase = await createClient();
   const serviceClient = createServiceRoleClient();
 
+  // Corte de emergencia, igual que el de Siigo. Va antes de todo lo demás:
+  // si está apagado no se debe ni crear el contacto, que también es escritura.
+  const ajustes = await getIntegrationSettings();
+  if (!ajustes.ghlEnabled) {
+    return { ok: false, error: "La integración con GHL está desconectada." };
+  }
+
   const { data: order } = await supabase
     .from("orders")
     .select(
-      "id, order_number, notes, payment_method, grand_total, subtotal_gross, subtotal_net, tax_total, discount_total, customer_id, seller_id",
+      "id, order_number, notes, payment_method, grand_total, subtotal_gross, subtotal_net, tax_total, discount_total, customer_id, seller_id, channel",
     )
     .eq("id", orderId)
     .maybeSingle();
@@ -130,12 +138,19 @@ export async function syncOrderToGhlAction(orderId: string): Promise<GhlSyncResu
     return { ok: false, error: "Falta GHL_LOCATION_ID en las variables de entorno" };
   }
 
-  const pipelineId = await readAppSetting<string>(serviceClient, "ghl_pipeline_id");
-  const pipelineStageId = await readAppSetting<string>(serviceClient, "ghl_pipeline_stage_id");
+  // El canal decide el embudo (doc GUIA_B2C): un pedido B2C en el embudo B2B
+  // dispararía el seguimiento equivocado. Si el B2C no está configurado se usa
+  // el B2B, que es mejor que no crear la oportunidad y perder el pedido de
+  // vista — pero se nota en el nombre del embudo al revisarlo.
+  const esB2c = order.channel === "B2C";
+  const pipelineId = (esB2c ? ajustes.ghlPipelineIdB2c : null) ?? ajustes.ghlPipelineId;
+  const pipelineStageId =
+    (esB2c ? ajustes.ghlPipelineStageIdB2c : null) ?? ajustes.ghlPipelineStageId;
   if (!pipelineId || !pipelineStageId) {
     return {
       ok: false,
-      error: "Falta configurar ghl_pipeline_id / ghl_pipeline_stage_id en app_settings",
+      error:
+        "Falta elegir el embudo y la etapa de GHL. Se configuran en Configuración → GoHighLevel.",
     };
   }
 

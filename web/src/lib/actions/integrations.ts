@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
+import { GhlApiError, listGhlPipelines, listGhlUsers } from "@/lib/ghl/client";
 import {
   INTEGRATION_KEYS,
   parseIntegrationSettings,
@@ -17,7 +18,7 @@ export async function getIntegrationSettings(): Promise<IntegrationSettings> {
 
 export type SettingResult = { ok: true } | { ok: false; error: string };
 
-async function write(key: string, value: boolean | number): Promise<SettingResult> {
+async function write(key: string, value: boolean | number | string): Promise<SettingResult> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_app_setting", { p_key: key, p_value: value });
   if (error) return { ok: false, error: error.message };
@@ -34,6 +35,76 @@ export async function setStockSyncEnabledAction(enabled: boolean): Promise<Setti
 
 export async function setInvoiceDocumentAction(documentId: number): Promise<SettingResult> {
   return write("siigo_invoice_document_id", documentId);
+}
+
+export async function setGhlEnabledAction(enabled: boolean): Promise<SettingResult> {
+  return write("ghl_integration_enabled", enabled);
+}
+
+/**
+ * Guarda el embudo y la etapa donde caen los pedidos. Los dos van juntos
+ * a propósito: una etapa pertenece a un embudo, y guardar uno sin el otro
+ * dejaría una combinación que GHL rechaza al crear la oportunidad.
+ */
+export async function setGhlPipelineAction(
+  canal: "B2B" | "B2C",
+  pipelineId: string,
+  stageId: string,
+): Promise<SettingResult> {
+  const sufijo = canal === "B2C" ? "_b2c" : "";
+  const primero = await write(`ghl_pipeline_id${sufijo}`, pipelineId);
+  if (!primero.ok) return primero;
+  return write(`ghl_pipeline_stage_id${sufijo}`, stageId);
+}
+
+export type GhlPipelinesResult =
+  | {
+      ok: true;
+      locationId: string;
+      pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[];
+      users: { id: string; name: string; email: string | null }[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Lee los embudos, sus etapas y los usuarios de la subcuenta. Es solo lectura:
+ * no crea ni cambia nada en GHL, así que sirve igual con la integración
+ * apagada — que es justo cuando hace falta, para saber si ya se puede
+ * encender y con qué ids.
+ */
+export async function loadGhlConfigOptionsAction(): Promise<GhlPipelinesResult> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "ADMIN") {
+    return { ok: false, error: "Solo un administrador puede leer la configuración de GHL" };
+  }
+
+  const token = process.env.GHL_PRIVATE_TOKEN;
+  const locationId = process.env.GHL_LOCATION_ID;
+  if (!token || !locationId) {
+    return {
+      ok: false,
+      error:
+        "Faltan GHL_PRIVATE_TOKEN o GHL_LOCATION_ID en el servidor. Se agregan en Vercel y solo aplican a despliegues nuevos.",
+    };
+  }
+
+  try {
+    // En paralelo: son dos lecturas independientes y así la pantalla no
+    // espera una detrás de la otra.
+    const [pipelines, users] = await Promise.all([
+      listGhlPipelines(locationId),
+      listGhlUsers(locationId),
+    ]);
+    return { ok: true, locationId, pipelines, users };
+  } catch (err) {
+    const mensaje =
+      err instanceof GhlApiError
+        ? `GHL respondió ${err.status}: ${err.body.slice(0, 300)}`
+        : err instanceof Error
+          ? err.message
+          : "Error desconocido";
+    return { ok: false, error: mensaje };
+  }
 }
 
 // Prueba de conexión: solo autentica y pide el catálogo de tipos de documento.

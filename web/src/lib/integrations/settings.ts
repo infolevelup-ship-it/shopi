@@ -12,6 +12,11 @@ export const INTEGRATION_KEYS = [
   "siigo_integration_enabled",
   "siigo_stock_sync_enabled",
   "siigo_invoice_document_id",
+  "ghl_integration_enabled",
+  "ghl_pipeline_id",
+  "ghl_pipeline_stage_id",
+  "ghl_pipeline_id_b2c",
+  "ghl_pipeline_stage_id_b2c",
 ];
 
 export type IntegrationSettings = {
@@ -23,7 +28,21 @@ export type IntegrationSettings = {
   invoiceDocumentId: number;
   /** ¿Estamos emitiendo contra un documento que no llega a la DIAN? */
   isTestDocument: boolean;
+
+  /** Corte general de GHL: con esto en falso, no se crea nada allá. */
+  ghlEnabled: boolean;
+  /** Embudo y etapa donde caen los pedidos B2B. */
+  ghlPipelineId: string | null;
+  ghlPipelineStageId: string | null;
+  /** Los B2C van a otro embudo (doc GUIA_B2C). Si falta, se usa el B2B. */
+  ghlPipelineIdB2c: string | null;
+  ghlPipelineStageIdB2c: string | null;
 };
+
+function texto(raw: Map<string, unknown>, clave: string): string | null {
+  const v = raw.get(clave);
+  return typeof v === "string" && v.trim() !== "" ? v : null;
+}
 
 export function parseIntegrationSettings(raw: Map<string, unknown>): IntegrationSettings {
   // Arranca DESCONECTADO a propósito. Si la clave no existe todavía, lo seguro
@@ -43,5 +62,13 @@ export function parseIntegrationSettings(raw: Map<string, unknown>): Integration
     stockSyncEnabled: stock === undefined ? true : stock === true,
     invoiceDocumentId,
     isTestDocument: invoiceDocumentId !== SIIGO_DOC_ELECTRONIC,
+
+    // Misma regla que Siigo: si la clave no existe, desconectado. Conectarse
+    // es un acto deliberado, no el estado por defecto.
+    ghlEnabled: raw.get("ghl_integration_enabled") === true,
+    ghlPipelineId: texto(raw, "ghl_pipeline_id"),
+    ghlPipelineStageId: texto(raw, "ghl_pipeline_stage_id"),
+    ghlPipelineIdB2c: texto(raw, "ghl_pipeline_id_b2c"),
+    ghlPipelineStageIdB2c: texto(raw, "ghl_pipeline_stage_id_b2c"),
   };
 }

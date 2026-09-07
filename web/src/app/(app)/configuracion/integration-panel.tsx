@@ -3,11 +3,15 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  loadGhlConfigOptionsAction,
+  setGhlEnabledAction,
+  setGhlPipelineAction,
   setInvoiceDocumentAction,
   setSiigoEnabledAction,
   setStockSyncEnabledAction,
   testSiigoConnectionAction,
   type ConnectionTest,
+  type GhlPipelinesResult,
 } from "@/lib/actions/integrations";
 import { syncProductCatalogAction, type CatalogSyncResult } from "@/lib/actions/catalog";
 import {
@@ -66,6 +70,13 @@ export function IntegrationPanel({
   const [test, setTest] = useState<ConnectionTest | null>(null);
   const [catalogo, setCatalogo] = useState<CatalogSyncResult | null>(null);
   const [importe, setImporte] = useState<CustomerImportResult | null>(null);
+  const [ghlOpciones, setGhlOpciones] = useState<GhlPipelinesResult | null>(null);
+  const [ghlB2b, setGhlB2b] = useState(
+    `${settings.ghlPipelineId ?? ""}|${settings.ghlPipelineStageId ?? ""}`,
+  );
+  const [ghlB2c, setGhlB2c] = useState(
+    `${settings.ghlPipelineIdB2c ?? ""}|${settings.ghlPipelineStageIdB2c ?? ""}`,
+  );
   const [isPending, startTransition] = useTransition();
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
@@ -445,6 +456,138 @@ export function IntegrationPanel({
             </ul>
           </div>
         )}
+      </section>
+
+      {/* ------------------------------------------------------- GoHighLevel */}
+      <section className="card card-pad">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">GoHighLevel</h2>
+            <p className="mt-1 text-sm text-text-soft">
+              Cada cliente nuevo se crea como contacto y cada pedido como oportunidad en el
+              embudo. Apagarlo no afecta a Siigo ni a la facturación.
+            </p>
+          </div>
+          <button
+            disabled={isPending}
+            onClick={() => run(() => setGhlEnabledAction(!settings.ghlEnabled))}
+            className={`btn ${settings.ghlEnabled ? "btn-danger" : "btn-primary"}`}
+          >
+            {settings.ghlEnabled ? "Desconectar" : "Conectar"}
+          </button>
+        </div>
+
+        <p className={`mt-3 text-sm font-medium ${settings.ghlEnabled ? "text-success" : "text-danger"}`}>
+          {settings.ghlEnabled ? "● Conectado" : "● Desconectado — no se está creando nada en GHL"}
+        </p>
+
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="mb-2 text-sm text-text-soft">
+            El embudo y la etapa donde cae cada pedido. Se leen de tu cuenta: no hay que copiar
+            ids a mano de la URL de GHL.
+          </p>
+          <button
+            disabled={isPending}
+            onClick={() => {
+              setError(null);
+              startTransition(async () => {
+                const r = await loadGhlConfigOptionsAction();
+                setGhlOpciones(r);
+                if (!r.ok) setError(r.error);
+              });
+            }}
+            className="btn btn-secondary"
+          >
+            {isPending ? "Leyendo…" : "Leer embudos y usuarios de GHL"}
+          </button>
+
+          {ghlOpciones && ghlOpciones.ok && (
+            <div className="mt-4 grid gap-4">
+              <p className="text-sm text-success">
+                ✔ El servidor se conectó con GHL. {ghlOpciones.pipelines.length} embudos y{" "}
+                {ghlOpciones.users.length} usuarios en la subcuenta{" "}
+                <span className="font-mono text-xs">{ghlOpciones.locationId}</span>.
+              </p>
+
+              {(["B2B", "B2C"] as const).map((canal) => {
+                const valor = canal === "B2B" ? ghlB2b : ghlB2c;
+                const setValor = canal === "B2B" ? setGhlB2b : setGhlB2c;
+                return (
+                  <div key={canal}>
+                    <label htmlFor={`ghl-${canal}`} className="field-label">
+                      Embudo y etapa para pedidos {canal}
+                    </label>
+                    <select
+                      id={`ghl-${canal}`}
+                      value={valor}
+                      onChange={(e) => setValor(e.target.value)}
+                      className="input"
+                    >
+                      <option value="|">— sin elegir —</option>
+                      {ghlOpciones.pipelines.flatMap((pl) =>
+                        pl.stages.map((et) => (
+                          <option key={`${pl.id}|${et.id}`} value={`${pl.id}|${et.id}`}>
+                            {pl.name} → {et.name}
+                          </option>
+                        )),
+                      )}
+                    </select>
+                    <button
+                      disabled={isPending || !valor.includes("|") || valor === "|"}
+                      onClick={() => {
+                        const [pl, et] = valor.split("|");
+                        run(() => setGhlPipelineAction(canal, pl, et));
+                      }}
+                      className="btn btn-secondary btn-sm mt-2"
+                    >
+                      Guardar {canal}
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Los ids de usuario hacen falta para asignarle la oportunidad a
+                  la vendedora que tomó el pedido (users.ghl_user_id). Todavía
+                  no se pueden asignar desde aquí: se listan para tenerlos. */}
+              <div>
+                <p className="field-label">Usuarios de GHL</p>
+                <ul className="grid gap-1 text-sm">
+                  {ghlOpciones.users.map((u) => (
+                    <li
+                      key={u.id}
+                      className="flex flex-wrap items-center justify-between gap-2 border-b border-line py-1.5 last:border-b-0"
+                    >
+                      <span>
+                        {u.name}
+                        {u.email ? <span className="text-text-soft"> · {u.email}</span> : null}
+                      </span>
+                      <span className="font-mono text-xs text-text-muted">{u.id}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="s-note mt-1">
+                  Para que la oportunidad quede asignada a la vendedora, este id va en su ficha
+                  de usuario. Pásame la correspondencia y la cargo.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!ghlOpciones && (settings.ghlPipelineId || settings.ghlPipelineIdB2c) && (
+            <p className="mt-3 text-sm text-text-soft">
+              Configurado: B2B{" "}
+              <span className="font-mono text-xs">{settings.ghlPipelineId ?? "—"}</span> · B2C{" "}
+              <span className="font-mono text-xs">{settings.ghlPipelineIdB2c ?? "(usa el B2B)"}</span>
+            </p>
+          )}
+
+          {settings.ghlEnabled && !settings.ghlPipelineId && (
+            <p className="mt-3 text-sm font-medium text-[#b54708]">
+              ⚠ La integración está encendida pero no hay embudo elegido: los pedidos van a
+              fallar al crear la oportunidad.
+            </p>
+          )}
+        </div>
       </section>
     </div>
   );
