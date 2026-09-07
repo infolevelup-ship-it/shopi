@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { syncOrderToGhlAction } from "@/lib/actions/ghl";
 
 export type QuoteSearchResult = {
   id: string;
@@ -107,6 +108,59 @@ export async function createQuoteAction(input: CreateQuoteInput): Promise<Create
     return { ok: false, error: error.message };
   }
   return { ok: true, quoteId: data!.id };
+}
+
+// Editar una cotización que todavía no se convirtió en pedido. El cliente no
+// se cambia: una cotización para otro cliente es otra cotización.
+export type UpdateQuoteInput = Omit<CreateQuoteInput, "customerId"> & { quoteId: string };
+
+export async function updateQuoteAction(input: UpdateQuoteInput): Promise<CreateQuoteResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("update_quote", {
+    p_quote_id: input.quoteId,
+    p_items: input.items.map((i) => ({
+      product_id: i.productId,
+      quantity: i.quantity,
+      unit_price: i.unitPrice,
+      discount_percent: i.discountPercent ?? 0,
+    })),
+    p_price_list: input.priceList || undefined,
+    p_notes: input.notes || undefined,
+    p_valid_until: input.validUntil || undefined,
+    p_retention_percent: input.retentionPercent ?? 0,
+    p_payment_method: input.paymentMethod || undefined,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, quoteId: data!.id };
+}
+
+export type ConvertQuoteResult =
+  | { ok: true; orderId: string }
+  | { ok: false; error: string };
+
+// Pasar la cotización a pedido. El pedido sale con el precio de HOY del
+// catálogo, no con el cotizado (doc de la migración 0027): la pantalla compara
+// y avisa antes de que la vendedora confirme.
+export async function convertQuoteToOrderAction(
+  quoteId: string,
+  channel?: string,
+): Promise<ConvertQuoteResult> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("convert_quote_to_order", {
+    p_quote_id: quoteId,
+    p_channel: channel || undefined,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  // Mismo criterio que createOrderAction: un fallo de GHL no invalida el
+  // pedido que ya existe en WOW.
+  await syncOrderToGhlAction(data!.id);
+
+  return { ok: true, orderId: data!.id };
 }
 
 export type QuoteActionResult = { ok: true } | { ok: false; error: string };

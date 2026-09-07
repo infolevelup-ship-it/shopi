@@ -7,6 +7,8 @@ import { Callout, PageHeader, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatDate, formatMoney } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
 import { PRICE_LISTS } from "@/lib/ui/fiscal";
+import { getProductsByIds } from "@/lib/actions/products";
+import { precioDeLista } from "@/lib/ui/precios";
 
 function Condition({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
@@ -30,7 +32,7 @@ export default async function QuoteDetailPage({
     supabase
       .from("quotes")
       .select(
-        "id, quote_number, status, price_list, payment_method, retention_percent, retention_total, valid_until, subtotal, discount_total, tax_total, grand_total, notes, created_at, sent_at, accepted_at, lost_at, lost_reason, seller_id, customer:customers(id, legal_name, first_name, last_name, commercial_name), seller:users!quotes_seller_id_fkey(name)",
+        "id, quote_number, status, price_list, payment_method, retention_percent, retention_total, valid_until, subtotal, discount_total, tax_total, grand_total, notes, created_at, sent_at, accepted_at, lost_at, lost_reason, seller_id, converted_order_id, customer:customers(id, legal_name, first_name, last_name, commercial_name), seller:users!quotes_seller_id_fkey(name)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -44,10 +46,32 @@ export default async function QuoteDetailPage({
   const { data: items } = await supabase
     .from("quote_items")
     .select(
-      "id, product_name_snapshot, product_code_snapshot, quantity, unit_price, discount_value, tax_percent, line_total",
+      "id, product_id, product_name_snapshot, product_code_snapshot, quantity, unit_price, discount_value, tax_percent, line_total",
     )
     .eq("quote_id", id)
     .order("created_at", { ascending: true });
+
+  // El pedido se crea con el precio de HOY del catálogo, no con el cotizado
+  // (migración 0026: el precio ya no lo pone el navegador). Se compara aquí
+  // para poder decirle a la vendedora qué cambió ANTES de convertir, en vez
+  // de que se entere cuando el cliente reciba la factura.
+  const productIds = (items ?? []).map((i) => i.product_id).filter((v): v is string => !!v);
+  const productos = productIds.length > 0 ? await getProductsByIds([...new Set(productIds)]) : [];
+  const porId = new Map(productos.map((p) => [p.id, p]));
+
+  const cambiosDePrecio = (items ?? [])
+    .map((i) => {
+      const producto = i.product_id ? porId.get(i.product_id) : undefined;
+      const hoy = producto ? precioDeLista(producto, quote.price_list) : null;
+      if (hoy === null || hoy === undefined) return null;
+      if (Number(hoy) === Number(i.unit_price)) return null;
+      return {
+        nombre: i.product_name_snapshot ?? "",
+        cotizado: Number(i.unit_price),
+        hoy: Number(hoy),
+      };
+    })
+    .filter((c): c is { nombre: string; cotizado: number; hoy: number } => c !== null);
 
   const customer = Array.isArray(quote.customer) ? quote.customer[0] : quote.customer;
   const seller = Array.isArray(quote.seller) ? quote.seller[0] : quote.seller;
@@ -55,6 +79,16 @@ export default async function QuoteDetailPage({
   const canAct =
     !!profile &&
     (profile.id === quote.seller_id || profile.role === "SUPERVISOR" || profile.role === "ADMIN");
+
+  // Un pedido siempre se puede crear desde una cotización viva; el enlace al
+  // pedido ya creado reemplaza al botón cuando ya se convirtió.
+  const puedeConvertir =
+    canAct &&
+    !quote.converted_order_id &&
+    !["LOST", "CANCELLED", "EXPIRED", "CONVERTED"].includes(quote.status);
+
+  const puedeEditar =
+    canAct && ["DRAFT", "SENT", "FOLLOW_UP", "ACCEPTED"].includes(quote.status);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -77,6 +111,11 @@ export default async function QuoteDetailPage({
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge kind="quote" status={quote.status} />
+            {puedeEditar && (
+              <Link href={`/quotes/${quote.id}/editar`} className="btn btn-secondary btn-sm">
+                Editar
+              </Link>
+            )}
             <Link href={`/quotes/${quote.id}/imprimir`} className="btn btn-secondary btn-sm">
               Imprimir
             </Link>
@@ -191,7 +230,15 @@ export default async function QuoteDetailPage({
           )}
         </section>
 
-        {canAct && <QuoteActions quoteId={quote.id} status={quote.status} />}
+        {canAct && (
+          <QuoteActions
+            quoteId={quote.id}
+            status={quote.status}
+            puedeConvertir={puedeConvertir}
+            convertedOrderId={quote.converted_order_id}
+            cambiosDePrecio={cambiosDePrecio}
+          />
+        )}
       </div>
     </div>
   );
