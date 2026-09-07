@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { getCurrentProfile } from "@/lib/auth";
-import { searchProducts } from "@/lib/actions/products";
+import { listProducts } from "@/lib/actions/products";
 import { formatMoney, formatNumber } from "@/lib/ui/format";
 import { EmptyState, PageHeader, Tone_ } from "@/components/ui";
 import { SearchForm } from "@/components/search-form";
+import { Pager } from "@/components/pager";
+
+const POR_PAGINA = 50;
 
 // doc 11 §30: el catálogo se lee de un vistazo — nombre, SKU, precio y stock.
 // El estado del stock se muestra con texto, nunca solo con color (doc 11 §35).
@@ -21,16 +24,33 @@ function StockCell({ stock }: { stock: number | null }) {
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; p?: string }>;
 }) {
-  const { q = "" } = await searchParams;
-  const [profile, products] = await Promise.all([getCurrentProfile(), searchProducts(q)]);
+  const { q = "", p } = await searchParams;
+  // Una página fuera de rango (?p=0, ?p=abc, ?p=999 tras borrar productos) no
+  // debe dar error ni una lista vacía sin explicación: se acota a la primera.
+  const pedida = Number.parseInt(p ?? "1", 10);
+  const page = Number.isFinite(pedida) && pedida > 0 ? pedida : 1;
+
+  const [profile, primera] = await Promise.all([
+    getCurrentProfile(),
+    listProducts(q, page, POR_PAGINA),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(primera.total / POR_PAGINA));
+  const paginaReal = Math.min(page, totalPages);
+  const { rows: products, total } =
+    paginaReal === page ? primera : await listProducts(q, paginaReal, POR_PAGINA);
 
   return (
     <div>
       <PageHeader
         title="Productos"
-        subtitle={q ? `Resultados para "${q}"` : `${products.length} productos en catálogo`}
+        subtitle={
+          q
+            ? `${total} ${total === 1 ? "resultado" : "resultados"} para "${q}"`
+            : `${total} productos en catálogo`
+        }
         actions={
           profile?.role === "ADMIN" ? (
             <Link href="/products/new" className="btn btn-primary btn-block-mobile">
@@ -118,6 +138,16 @@ export default async function ProductsPage({
               </li>
             ))}
           </ul>
+
+          <Pager
+            page={paginaReal}
+            totalPages={totalPages}
+            total={total}
+            basePath="/products"
+            params={{ q }}
+            labelSingular="producto"
+            labelPlural="productos"
+          />
         </>
       )}
     </div>

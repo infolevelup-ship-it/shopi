@@ -15,19 +15,31 @@ export type ProductSearchResult = {
   siigo_product_id: string | null;
 };
 
+const COLUMNAS =
+  "id, code, name, brand, active, price_public, price_professional, price_salon, stock_cache, siigo_product_id";
+
+// PostgREST separa las condiciones de un `or(...)` por comas y delimita el
+// grupo con paréntesis, así que esos caracteres dentro del texto buscado
+// rompen el filtro. Y no es rebuscado: medio catálogo se llama
+// "1.25 Plancha Ceramica / Giraffe (Plancha)".
+//
+// Se convierten en comodines en vez de escaparse: buscar "Giraffe (Plancha)"
+// queda como "%Giraffe %Plancha%%", que encuentra justo lo que se esperaba, y
+// el filtro no depende de cómo interprete PostgREST las comillas.
+function filtroDeBusqueda(q: string) {
+  const patron = `%${q.replace(/[,()"\\]/g, "%")}%`;
+  return `code.ilike.${patron},name.ilike.${patron},brand.ilike.${patron}`;
+}
+
+/** Para los buscadores con sugerencias: las primeras coincidencias, nada más. */
 export async function searchProducts(query: string): Promise<ProductSearchResult[]> {
   const supabase = await createClient();
   const q = query.trim();
 
-  let request = supabase
-    .from("products")
-    .select("id, code, name, brand, active, price_public, price_professional, price_salon, stock_cache, siigo_product_id")
-    .order("name", { ascending: true })
-    .limit(50);
+  let request = supabase.from("products").select(COLUMNAS).order("name", { ascending: true }).limit(50);
 
   if (q) {
-    const like = `%${q}%`;
-    request = request.or(`code.ilike.${like},name.ilike.${like},brand.ilike.${like}`);
+    request = request.or(filtroDeBusqueda(q));
   }
 
   const { data, error } = await request;
@@ -35,6 +47,47 @@ export async function searchProducts(query: string): Promise<ProductSearchResult
     throw new Error(`No se pudo buscar productos: ${error.message}`);
   }
   return data ?? [];
+}
+
+export type ProductPage = {
+  rows: ProductSearchResult[];
+  /** Cuántos hay en total con ese filtro, no cuántos trae esta página. */
+  total: number;
+};
+
+// El catálogo real de Productos WOW pasa de 1.700 referencias. `searchProducts`
+// corta en 50 sin decirlo, así que el catálogo completo necesita su propia
+// consulta: una página a la vez y el total de verdad, que es el que se muestra
+// en el encabezado.
+export async function listProducts(
+  query: string,
+  page: number,
+  pageSize: number,
+): Promise<ProductPage> {
+  const supabase = await createClient();
+  const q = query.trim();
+  const desde = (page - 1) * pageSize;
+
+  let request = supabase
+    .from("products")
+    .select(COLUMNAS, { count: "exact" })
+    .order("name", { ascending: true })
+    // Desempate por código, que es único: hay 11 nombres repetidos en el
+    // catálogo, y ordenar solo por nombre deja su orden relativo al azar en
+    // cada consulta. Entre páginas eso hace que una fila salga dos veces y
+    // otra no salga nunca, sin ningún síntoma visible.
+    .order("code", { ascending: true })
+    .range(desde, desde + pageSize - 1);
+
+  if (q) {
+    request = request.or(filtroDeBusqueda(q));
+  }
+
+  const { data, error, count } = await request;
+  if (error) {
+    throw new Error(`No se pudo buscar productos: ${error.message}`);
+  }
+  return { rows: data ?? [], total: count ?? 0 };
 }
 
 // Para editar un pedido hace falta re-tarifar sus líneas, y `order_items`
@@ -45,9 +98,7 @@ export async function getProductsByIds(ids: string[]): Promise<ProductSearchResu
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("products")
-    .select(
-      "id, code, name, brand, active, price_public, price_professional, price_salon, stock_cache, siigo_product_id",
-    )
+    .select(COLUMNAS)
     .in("id", ids);
 
   if (error) throw new Error(`No se pudieron cargar los productos: ${error.message}`);
