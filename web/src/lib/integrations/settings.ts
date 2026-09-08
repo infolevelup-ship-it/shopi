@@ -15,9 +15,29 @@ export const INTEGRATION_KEYS = [
   "ghl_integration_enabled",
   "ghl_pipeline_id",
   "ghl_pipeline_stage_id",
+  "ghl_pipeline_id_b2b_nuevo",
+  "ghl_pipeline_stage_id_b2b_nuevo",
   "ghl_pipeline_id_b2c",
   "ghl_pipeline_stage_id_b2c",
 ];
+
+// Los tres embudos que existen en la cuenta de GHL. El canal del pedido decide
+// entre B2B y B2C; dentro de B2B decide si el cliente ya había comprado.
+export const GHL_EMBUDOS = ["B2B_ANTIGUO", "B2B_NUEVO", "B2C"] as const;
+export type GhlEmbudo = (typeof GHL_EMBUDOS)[number];
+
+export const GHL_EMBUDO_LABEL: Record<GhlEmbudo, string> = {
+  B2B_ANTIGUO: "B2B · cliente que ya había comprado",
+  B2B_NUEVO: "B2B · cliente nuevo",
+  B2C: "B2C · consumidor final",
+};
+
+/** El sufijo con el que cada embudo se guarda en `app_settings`. */
+export function sufijoEmbudo(embudo: GhlEmbudo): string {
+  if (embudo === "B2B_NUEVO") return "_b2b_nuevo";
+  if (embudo === "B2C") return "_b2c";
+  return "";
+}
 
 export type IntegrationSettings = {
   /** Corte general: con esto en falso, nada sale hacia Siigo. */
@@ -31,10 +51,17 @@ export type IntegrationSettings = {
 
   /** Corte general de GHL: con esto en falso, no se crea nada allá. */
   ghlEnabled: boolean;
-  /** Embudo y etapa donde caen los pedidos B2B. */
+  /**
+   * Embudo de B2B para clientes que ya habían comprado. Es además el de
+   * respaldo: si un embudo más específico no está configurado, se usa este
+   * antes que dejar el pedido sin oportunidad.
+   */
   ghlPipelineId: string | null;
   ghlPipelineStageId: string | null;
-  /** Los B2C van a otro embudo (doc GUIA_B2C). Si falta, se usa el B2B. */
+  /** B2B, primera compra del cliente. */
+  ghlPipelineIdB2bNuevo: string | null;
+  ghlPipelineStageIdB2bNuevo: string | null;
+  /** Consumidor final (doc GUIA_B2C). */
   ghlPipelineIdB2c: string | null;
   ghlPipelineStageIdB2c: string | null;
 };
@@ -68,6 +95,8 @@ export function parseIntegrationSettings(raw: Map<string, unknown>): Integration
     ghlEnabled: raw.get("ghl_integration_enabled") === true,
     ghlPipelineId: texto(raw, "ghl_pipeline_id"),
     ghlPipelineStageId: texto(raw, "ghl_pipeline_stage_id"),
+    ghlPipelineIdB2bNuevo: texto(raw, "ghl_pipeline_id_b2b_nuevo"),
+    ghlPipelineStageIdB2bNuevo: texto(raw, "ghl_pipeline_stage_id_b2b_nuevo"),
     ghlPipelineIdB2c: texto(raw, "ghl_pipeline_id_b2c"),
     ghlPipelineStageIdB2c: texto(raw, "ghl_pipeline_stage_id_b2c"),
   };

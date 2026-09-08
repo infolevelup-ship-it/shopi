@@ -944,22 +944,31 @@ escritos en `app_settings`:
 Son **dos numeraciones distintas** y ninguna sirve en lugar de la otra: el id de Siigo identifica
 al vendedor en la factura, el de GHL al dueño de la oportunidad. Por eso van juntos por persona.
 
-| Persona | Correo | Rol GHL | GHL user id | Siigo seller id | ¿Existe en la app? |
-|---|---|---|---|---|---|
-| Ferney Aponte | ferney25898@gmail.com | admin | `IZFkiNca9Lmbirftqx2C` | — | **Sí** (ADMIN), ya cargado |
-| Ivonne Daza | ivonnedazav@gmail.com | admin | `N4xqjZOCrv7DfXk1jOQc` | 142 | No |
-| Karina Noriega | comercialproductoswow@gmail.com | admin | `0b6EU5KbJBc69PazOwCR` | 3375 | No |
-| Logística Wow (Carlos) | logistica@productoswow.com | user | `Szixj7uiGdKPjAiYBuPz` | 1826 | No |
-| Melissa Comercial1 | onlineventasredes@gmail.com | user | `PlluEp4vYC4bk1NLk1CE` | 3651 | No |
-| Sandra Ayala | comercialwowbogota@gmail.com | user | `caU6JUyjfHRO6pKz5FO7` | 3565 | No |
-| Silvia Lombana | marketingproductoswow@gmail.com | admin | `bnXGuAa2rBrjucV0weuF` | — | No |
+El `ghl_user_id` **no se escribe a mano en ninguna parte**: lo pone la app
+leyéndolo de la API y emparejando por correo (Configuración → GoHighLevel →
+"Vincular con GHL por correo"). Dos capturas de la misma lista de GHL daban
+`N4xqjZOCrv7DfXk1jOQc` y `N4xqjZOCrv7DfXklj0Qc` para Ivonne: esos ids mezclan
+`1` con `l` y `0` con `O`, y un id mal copiado le asigna las oportunidades de
+una persona a otra sin que salte ningún error.
+
+| Persona | Correo | Rol en la app | Siigo seller id |
+|---|---|---|---|
+| Ivonne Daza (dueña) | ivonnedazav@gmail.com | ADMIN | 142 |
+| Karina Noriega (jefa comercial) | comercialproductoswow@gmail.com | ADMIN | 3375 |
+| Silvia Lombana (marketing) | marketingproductoswow@gmail.com | ADMIN | — |
+| Ferney Aponte | ferney25898@gmail.com | ADMIN | — |
+| Melissa Comercial | onlineventasredes@gmail.com | SELLER | 3651 |
+| Sandra Ayala | comercialwowbogota@gmail.com | SELLER | 3565 |
+| Carlos (Logística) | logistica@productoswow.com | WAREHOUSE | 1826 |
 
 Cuidado al emparejar: la usuaria de demostración **"Karina Ríos"** (`karina.vendedora@…test`) no
 es **Karina Noriega**. Son personas distintas y el correo es lo único que lo distingue con
 certeza; emparejar por nombre le asignaría las oportunidades y las facturas a quien no es.
 
-- [ ] Crear las 6 usuarias reales en `users` (con su login) y cargarles `ghl_user_id` de la tabla
-      de arriba y `siigo_seller_map` con el id de Siigo.
+- [ ] Crear los logins en Supabase → Authentication → Users (la contraseña la elige quien la usa,
+      por eso no lo hace una migración), y luego correr los dos botones del panel.
+- [ ] `siigo_seller_map` sigue pendiente: los ids de Siigo de la tabla se cargan cuando las fichas
+      existan.
 
 Dos huecos reales del `InvoiceService` que salieron al configurar esto, ya corregidos:
 

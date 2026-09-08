@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getIntegrationSettings } from "@/lib/actions/integrations";
+import type { GhlEmbudo } from "@/lib/integrations/settings";
 import {
   buildGhlContactPayload,
   buildGhlOpportunityPayload,
@@ -116,7 +117,7 @@ export async function syncOrderToGhlAction(orderId: string): Promise<GhlSyncResu
   const { data: customer } = await supabase
     .from("customers")
     .select(
-      "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, email, phone, address, city, state_code, city_code, fiscal_responsibility, purchase_type, customer_type_classification, channel, siigo_customer_id, ghl_contact_id",
+      "id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, email, phone, address, city, state_code, city_code, fiscal_responsibility, purchase_type, customer_type_classification, channel, siigo_customer_id, ghl_contact_id, source",
     )
     .eq("id", order.customer_id)
     .maybeSingle();
@@ -138,14 +139,36 @@ export async function syncOrderToGhlAction(orderId: string): Promise<GhlSyncResu
     return { ok: false, error: "Falta GHL_LOCATION_ID en las variables de entorno" };
   }
 
-  // El canal decide el embudo (doc GUIA_B2C): un pedido B2C en el embudo B2B
-  // dispararía el seguimiento equivocado. Si el B2C no está configurado se usa
-  // el B2B, que es mejor que no crear la oportunidad y perder el pedido de
-  // vista — pero se nota en el nombre del embudo al revisarlo.
-  const esB2c = order.channel === "B2C";
-  const pipelineId = (esB2c ? ajustes.ghlPipelineIdB2c : null) ?? ajustes.ghlPipelineId;
-  const pipelineStageId =
-    (esB2c ? ajustes.ghlPipelineStageIdB2c : null) ?? ajustes.ghlPipelineStageId;
+  // GHL tiene tres embudos y cada uno dispara un seguimiento distinto, así que
+  // meter un pedido en el equivocado no es cosmético: al cliente le llega la
+  // secuencia que no es.
+  //
+  // "Cliente nuevo" se decide con dos señales, y basta una para que NO lo sea:
+  // que venga de Siigo (entonces ya compraba antes de existir esta app) o que
+  // ya tenga otro pedido aquí. Se excluye el pedido actual del conteo, porque
+  // para cuando esto corre ya está creado.
+  let embudo: GhlEmbudo = "B2C";
+  if (order.channel !== "B2C") {
+    const { count } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("customer_id", order.customer_id)
+      .neq("id", orderId);
+    const yaCompraba = customer.source === "SIIGO" || (count ?? 0) > 0;
+    embudo = yaCompraba ? "B2B_ANTIGUO" : "B2B_NUEVO";
+  }
+
+  // Si el embudo específico no está configurado se cae al de B2B antiguo, que
+  // es el que siempre debería estarlo: perder el pedido de vista en GHL es
+  // peor que verlo en el embudo de al lado.
+  const elegido = {
+    B2C: [ajustes.ghlPipelineIdB2c, ajustes.ghlPipelineStageIdB2c],
+    B2B_NUEVO: [ajustes.ghlPipelineIdB2bNuevo, ajustes.ghlPipelineStageIdB2bNuevo],
+    B2B_ANTIGUO: [ajustes.ghlPipelineId, ajustes.ghlPipelineStageId],
+  }[embudo];
+
+  const pipelineId = elegido[0] ?? ajustes.ghlPipelineId;
+  const pipelineStageId = elegido[1] ?? ajustes.ghlPipelineStageId;
   if (!pipelineId || !pipelineStageId) {
     return {
       ok: false,

@@ -2937,6 +2937,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      sync_equipo_real: {
+        Args: never
+        Returns: {
+          correo: string
+          estado: string
+        }[]
+      }
       update_customer: {
         Args: {
           p_address?: string

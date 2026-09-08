@@ -6,6 +6,8 @@ import { GhlApiError, listGhlPipelines, listGhlUsers } from "@/lib/ghl/client";
 import {
   INTEGRATION_KEYS,
   parseIntegrationSettings,
+  sufijoEmbudo,
+  type GhlEmbudo,
   type IntegrationSettings,
 } from "@/lib/integrations/settings";
 
@@ -47,11 +49,11 @@ export async function setGhlEnabledAction(enabled: boolean): Promise<SettingResu
  * dejaría una combinación que GHL rechaza al crear la oportunidad.
  */
 export async function setGhlPipelineAction(
-  canal: "B2B" | "B2C",
+  embudo: GhlEmbudo,
   pipelineId: string,
   stageId: string,
 ): Promise<SettingResult> {
-  const sufijo = canal === "B2C" ? "_b2c" : "";
+  const sufijo = sufijoEmbudo(embudo);
   const primero = await write(`ghl_pipeline_id${sufijo}`, pipelineId);
   if (!primero.ok) return primero;
   return write(`ghl_pipeline_stage_id${sufijo}`, stageId);
@@ -105,6 +107,101 @@ export async function loadGhlConfigOptionsAction(): Promise<GhlPipelinesResult> 
           : "Error desconocido";
     return { ok: false, error: mensaje };
   }
+}
+
+export type VinculacionResult =
+  | { ok: true; vinculadas: { nombre: string; correo: string }[]; sinPareja: string[] }
+  | { ok: false; error: string };
+
+/**
+ * Empareja las usuarias de la app con las de GHL POR CORREO y guarda su
+ * `ghl_user_id`, que es lo que hace que la oportunidad quede asignada a quien
+ * tomó el pedido.
+ *
+ * Por correo y no por nombre, y leyendo el id de la API y no de una lista
+ * escrita a mano, por dos razones distintas que llevan al mismo error:
+ * en esta cuenta conviven "Karina Ríos" (demo) y "Karina Noriega" (jefa
+ * comercial); y los ids de GHL mezclan 1 con l y 0 con O, así que copiarlos de
+ * una captura es una lotería. Las dos formas terminan asignándole las
+ * oportunidades de una persona a otra, sin ningún error visible.
+ */
+export async function vincularUsuariasConGhlAction(): Promise<VinculacionResult> {
+  const profile = await getCurrentProfile();
+  if (!profile || profile.role !== "ADMIN") {
+    return { ok: false, error: "Solo un administrador puede vincular las usuarias" };
+  }
+
+  const locationId = process.env.GHL_LOCATION_ID;
+  if (!locationId) {
+    return { ok: false, error: "Falta GHL_LOCATION_ID en el servidor." };
+  }
+
+  let usuariosGhl;
+  try {
+    usuariosGhl = await listGhlUsers(locationId);
+  } catch (err) {
+    const mensaje =
+      err instanceof GhlApiError
+        ? `GHL respondió ${err.status}: ${err.body.slice(0, 300)}`
+        : err instanceof Error
+          ? err.message
+          : "Error desconocido";
+    return { ok: false, error: mensaje };
+  }
+
+  const porCorreo = new Map(
+    usuariosGhl
+      .filter((u) => u.email)
+      .map((u) => [u.email!.trim().toLowerCase(), u.id] as const),
+  );
+
+  const supabase = await createClient();
+  const { data: usuarias, error } = await supabase.from("users").select("id, name, email");
+  if (error) return { ok: false, error: error.message };
+
+  const vinculadas: { nombre: string; correo: string }[] = [];
+  const sinPareja: string[] = [];
+
+  for (const u of usuarias ?? []) {
+    const correo = (u.email ?? "").trim().toLowerCase();
+    const ghlId = correo ? porCorreo.get(correo) : undefined;
+    if (!ghlId) {
+      sinPareja.push(u.email ?? u.name);
+      continue;
+    }
+    // `users` no tiene política de UPDATE para el propio usuario, pero sí para
+    // ADMIN; si algún día deja de tenerla, esto afectaría 0 filas en silencio,
+    // así que el resultado se comprueba con la fila devuelta.
+    const { data: fila } = await supabase
+      .from("users")
+      .update({ ghl_user_id: ghlId, updated_at: new Date().toISOString() })
+      .eq("id", u.id)
+      .select("id")
+      .maybeSingle();
+    if (fila) vinculadas.push({ nombre: u.name, correo: u.email ?? "" });
+    else sinPareja.push(`${u.email ?? u.name} (no se pudo guardar)`);
+  }
+
+  return { ok: true, vinculadas, sinPareja };
+}
+
+export type EquipoResult =
+  | { ok: true; filas: { correo: string; estado: string }[] }
+  | { ok: false; error: string };
+
+/**
+ * Crea la ficha de cada integrante del equipo con su rol, para quien ya tenga
+ * login en Supabase. Devuelve también a quién le falta, que es la mitad útil:
+ * sin login no hay ficha, y sin ficha esa persona no puede entrar.
+ */
+export async function sincronizarEquipoAction(): Promise<EquipoResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("sync_equipo_real");
+  if (error) return { ok: false, error: error.message };
+  return {
+    ok: true,
+    filas: (data ?? []).map((f) => ({ correo: f.correo as string, estado: f.estado as string })),
+  };
 }
 
 // Prueba de conexión: solo autentica y pide el catálogo de tipos de documento.

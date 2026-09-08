@@ -7,11 +7,15 @@ import {
   setGhlEnabledAction,
   setGhlPipelineAction,
   setInvoiceDocumentAction,
+  sincronizarEquipoAction,
+  vincularUsuariasConGhlAction,
   setSiigoEnabledAction,
   setStockSyncEnabledAction,
   testSiigoConnectionAction,
   type ConnectionTest,
+  type EquipoResult,
   type GhlPipelinesResult,
+  type VinculacionResult,
 } from "@/lib/actions/integrations";
 import { syncProductCatalogAction, type CatalogSyncResult } from "@/lib/actions/catalog";
 import {
@@ -20,8 +24,11 @@ import {
   type ImportCursor,
 } from "@/lib/actions/customer-import";
 import {
+  GHL_EMBUDOS,
+  GHL_EMBUDO_LABEL,
   SIIGO_DOC_ELECTRONIC,
   SIIGO_DOC_TEST,
+  type GhlEmbudo,
   type IntegrationSettings,
 } from "@/lib/integrations/settings";
 import { Callout } from "@/components/ui";
@@ -71,12 +78,13 @@ export function IntegrationPanel({
   const [catalogo, setCatalogo] = useState<CatalogSyncResult | null>(null);
   const [importe, setImporte] = useState<CustomerImportResult | null>(null);
   const [ghlOpciones, setGhlOpciones] = useState<GhlPipelinesResult | null>(null);
-  const [ghlB2b, setGhlB2b] = useState(
-    `${settings.ghlPipelineId ?? ""}|${settings.ghlPipelineStageId ?? ""}`,
-  );
-  const [ghlB2c, setGhlB2c] = useState(
-    `${settings.ghlPipelineIdB2c ?? ""}|${settings.ghlPipelineStageIdB2c ?? ""}`,
-  );
+  const [vinculacion, setVinculacion] = useState<VinculacionResult | null>(null);
+  const [equipo, setEquipo] = useState<EquipoResult | null>(null);
+  const [ghlEmbudos, setGhlEmbudos] = useState<Record<GhlEmbudo, string>>({
+    B2B_ANTIGUO: `${settings.ghlPipelineId ?? ""}|${settings.ghlPipelineStageId ?? ""}`,
+    B2B_NUEVO: `${settings.ghlPipelineIdB2bNuevo ?? ""}|${settings.ghlPipelineStageIdB2bNuevo ?? ""}`,
+    B2C: `${settings.ghlPipelineIdB2c ?? ""}|${settings.ghlPipelineStageIdB2c ?? ""}`,
+  });
   const [isPending, startTransition] = useTransition();
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
@@ -509,18 +517,19 @@ export function IntegrationPanel({
                 <span className="font-mono text-xs">{ghlOpciones.locationId}</span>.
               </p>
 
-              {(["B2B", "B2C"] as const).map((canal) => {
-                const valor = canal === "B2B" ? ghlB2b : ghlB2c;
-                const setValor = canal === "B2B" ? setGhlB2b : setGhlB2c;
+              {GHL_EMBUDOS.map((embudo) => {
+                const valor = ghlEmbudos[embudo];
                 return (
-                  <div key={canal}>
-                    <label htmlFor={`ghl-${canal}`} className="field-label">
-                      Embudo y etapa para pedidos {canal}
+                  <div key={embudo}>
+                    <label htmlFor={`ghl-${embudo}`} className="field-label">
+                      {GHL_EMBUDO_LABEL[embudo]}
                     </label>
                     <select
-                      id={`ghl-${canal}`}
+                      id={`ghl-${embudo}`}
                       value={valor}
-                      onChange={(e) => setValor(e.target.value)}
+                      onChange={(e) =>
+                        setGhlEmbudos((prev) => ({ ...prev, [embudo]: e.target.value }))
+                      }
                       className="input"
                     >
                       <option value="|">— sin elegir —</option>
@@ -533,22 +542,24 @@ export function IntegrationPanel({
                       )}
                     </select>
                     <button
-                      disabled={isPending || !valor.includes("|") || valor === "|"}
+                      disabled={isPending || valor === "|" || !valor.includes("|")}
                       onClick={() => {
                         const [pl, et] = valor.split("|");
-                        run(() => setGhlPipelineAction(canal, pl, et));
+                        run(() => setGhlPipelineAction(embudo, pl, et));
                       }}
                       className="btn btn-secondary btn-sm mt-2"
                     >
-                      Guardar {canal}
+                      Guardar
                     </button>
                   </div>
                 );
               })}
 
-              {/* Los ids de usuario hacen falta para asignarle la oportunidad a
-                  la vendedora que tomó el pedido (users.ghl_user_id). Todavía
-                  no se pueden asignar desde aquí: se listan para tenerlos. */}
+              <p className="s-note">
+                Un pedido es de “cliente nuevo” solo si el cliente no vino de Siigo y no tiene
+                ningún otro pedido en la app. Basta una de las dos para que cuente como antiguo.
+              </p>
+
               <div>
                 <p className="field-label">Usuarios de GHL</p>
                 <ul className="grid gap-1 text-sm">
@@ -565,20 +576,28 @@ export function IntegrationPanel({
                     </li>
                   ))}
                 </ul>
-                <p className="s-note mt-1">
-                  Para que la oportunidad quede asignada a la vendedora, este id va en su ficha
-                  de usuario. Pásame la correspondencia y la cargo.
-                </p>
               </div>
             </div>
           )}
 
-          {!ghlOpciones && (settings.ghlPipelineId || settings.ghlPipelineIdB2c) && (
-            <p className="mt-3 text-sm text-text-soft">
-              Configurado: B2B{" "}
-              <span className="font-mono text-xs">{settings.ghlPipelineId ?? "—"}</span> · B2C{" "}
-              <span className="font-mono text-xs">{settings.ghlPipelineIdB2c ?? "(usa el B2B)"}</span>
-            </p>
+          {!ghlOpciones && settings.ghlPipelineId && (
+            <ul className="mt-3 grid gap-1 text-sm text-text-soft">
+              {GHL_EMBUDOS.map((embudo) => {
+                const id = {
+                  B2B_ANTIGUO: settings.ghlPipelineId,
+                  B2B_NUEVO: settings.ghlPipelineIdB2bNuevo,
+                  B2C: settings.ghlPipelineIdB2c,
+                }[embudo];
+                return (
+                  <li key={embudo}>
+                    {GHL_EMBUDO_LABEL[embudo]}:{" "}
+                    <span className="font-mono text-xs">
+                      {id ?? "(cae al de cliente antiguo)"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           )}
 
           {settings.ghlEnabled && !settings.ghlPipelineId && (
@@ -586,6 +605,79 @@ export function IntegrationPanel({
               ⚠ La integración está encendida pero no hay embudo elegido: los pedidos van a
               fallar al crear la oportunidad.
             </p>
+          )}
+        </div>
+
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="field-label">Equipo</p>
+          <p className="mb-2 text-sm text-text-soft">
+            Crea la ficha de cada persona con su rol, y le pega su id de GHL emparejando{" "}
+            <strong>por correo</strong>. Sin el id, la oportunidad queda sin dueño en el embudo.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              disabled={isPending}
+              onClick={() => {
+                setError(null);
+                startTransition(async () => {
+                  const r = await sincronizarEquipoAction();
+                  setEquipo(r);
+                  if (!r.ok) setError(r.error);
+                  router.refresh();
+                });
+              }}
+              className="btn btn-secondary"
+            >
+              Crear/actualizar fichas del equipo
+            </button>
+            <button
+              disabled={isPending}
+              onClick={() => {
+                setError(null);
+                startTransition(async () => {
+                  const r = await vincularUsuariasConGhlAction();
+                  setVinculacion(r);
+                  if (!r.ok) setError(r.error);
+                });
+              }}
+              className="btn btn-secondary"
+            >
+              Vincular con GHL por correo
+            </button>
+          </div>
+
+          {equipo && equipo.ok && (
+            <ul className="mt-3 grid gap-1 text-sm">
+              {equipo.filas.map((f) => (
+                <li
+                  key={f.correo}
+                  className="flex flex-wrap justify-between gap-2 border-b border-line py-1.5 last:border-b-0"
+                >
+                  <span>{f.correo}</span>
+                  <span
+                    className={
+                      f.estado.startsWith("FALTA") ? "font-medium text-[#b54708]" : "text-success"
+                    }
+                  >
+                    {f.estado}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {vinculacion && vinculacion.ok && (
+            <div className="mt-3 text-sm">
+              <p className="text-success">
+                ✔ {vinculacion.vinculadas.length} usuarias vinculadas con GHL.
+              </p>
+              {vinculacion.sinPareja.length > 0 && (
+                <p className="mt-1 text-text-soft">
+                  Sin pareja en GHL (su correo no aparece allá):{" "}
+                  {vinculacion.sinPareja.join(", ")}.
+                </p>
+              )}
+            </div>
           )}
         </div>
       </section>
