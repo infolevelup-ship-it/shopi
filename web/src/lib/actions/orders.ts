@@ -278,6 +278,32 @@ export async function submitOrderAction(orderId: string): Promise<OrderActionRes
   return { ok: true };
 }
 
+export type DeleteOrderResult =
+  | { ok: true; orderNumber: string }
+  | { ok: false; error: string };
+
+/**
+ * Borra un pedido de verdad, no lo marca como borrado. Es para limpiar
+ * pruebas: cancelar deja el pedido a la vista, y lo que se pidió es que no
+ * ensucie los datos.
+ *
+ * La función de la base es la que decide: solo ADMIN, y nunca un pedido que
+ * haya pasado por facturación. Aquí no se repite esa lógica — esconder el
+ * botón no es una restricción.
+ */
+export async function deleteOrderAction(
+  orderId: string,
+  reason?: string,
+): Promise<DeleteOrderResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("delete_order", {
+    p_order_id: orderId,
+    p_reason: reason || undefined,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, orderNumber: (data as string) ?? "" };
+}
+
 export async function cancelOrderAction(
   orderId: string,
   reason: string,

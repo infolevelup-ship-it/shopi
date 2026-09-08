@@ -2542,11 +2542,15 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       current_wow_user_id: { Args: never; Returns: string }
+      delete_order: {
+        Args: { p_order_id: string; p_reason?: string }
+        Returns: string
+      }
       delete_order_receipt: {
         Args: { p_attachment_id: string }
         Returns: string
       }
-      import_siigo_customers: { Args: { p_customers: Json }; Returns: number }
+      import_siigo_customers: { Args: { p_customers: Json }; Returns: Json }
       mark_prospect_lost: {
         Args: { p_prospect_id: string; p_reason: string }
         Returns: {

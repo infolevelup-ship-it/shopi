@@ -420,7 +420,14 @@ export default async function OrderDetailPage({
             />
           )}
 
-        {canAct && <OrderActions orderId={order.id} status={order.status} />}
+        {canAct && (
+          <OrderActions
+            orderId={order.id}
+            orderNumber={order.order_number}
+            status={order.status}
+            isAdmin={isAdmin}
+          />
+        )}
 
         {isAdmin && (
           <GhlSyncStatus

@@ -4,10 +4,12 @@
 // enlace del menú que lleva a una pantalla inexistente es peor que un menú
 // más corto.
 
+import type { IconName } from "@/components/icons";
+
 export type NavItem = {
   href: string;
   label: string;
-  icon: string;
+  icon: IconName;
   /** Roles que lo ven. Vacío = todos. */
   roles?: string[];
   /** Coincide también con subrutas (p.ej. /orders/123). */
@@ -18,44 +20,44 @@ export type NavGroup = { title?: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    items: [{ href: "/", label: "Inicio", icon: "🏠" }],
+    items: [{ href: "/", label: "Inicio", icon: "inicio" }],
   },
   {
     title: "Comercial",
     items: [
-      { href: "/customers", label: "Clientes", icon: "👥", match: "/customers" },
+      { href: "/customers", label: "Clientes", icon: "clientes", match: "/customers" },
       {
         href: "/prospects",
         label: "Prospectos",
-        icon: "🎯",
+        icon: "prospectos",
         match: "/prospects",
         roles: ["SELLER", "SUPERVISOR", "ADMIN"],
       },
       {
         href: "/quotes",
         label: "Cotizaciones",
-        icon: "📄",
+        icon: "cotizaciones",
         match: "/quotes",
         roles: ["SELLER", "SUPERVISOR", "ADMIN"],
       },
-      { href: "/orders", label: "Pedidos", icon: "🛒", match: "/orders" },
+      { href: "/orders", label: "Pedidos", icon: "pedidos", match: "/orders" },
     ],
   },
   {
     title: "Operación",
     items: [
-      { href: "/products", label: "Productos", icon: "📦", match: "/products" },
+      { href: "/products", label: "Productos", icon: "productos", match: "/products" },
       {
         href: "/orders/review",
         label: "Bodega",
-        icon: "🏭",
+        icon: "bodega",
         roles: ["WAREHOUSE", "SUPERVISOR", "ADMIN"],
       },
     ],
   },
   {
     title: "Análisis",
-    items: [{ href: "/reports", label: "Reportes", icon: "📊", match: "/reports" }],
+    items: [{ href: "/reports", label: "Reportes", icon: "reportes", match: "/reports" }],
   },
   {
     title: "Administración",
@@ -63,7 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         href: "/configuracion",
         label: "Configuración",
-        icon: "⚙️",
+        icon: "configuracion",
         match: "/configuracion",
         roles: ["ADMIN"],
       },
@@ -82,17 +84,17 @@ export function visibleGroups(role: string): NavGroup[] {
 export function mobileNavItems(role: string): NavItem[] {
   if (role === "WAREHOUSE") {
     return [
-      { href: "/", label: "Inicio", icon: "🏠" },
-      { href: "/orders/review", label: "Bodega", icon: "🏭" },
-      { href: "/orders", label: "Pedidos", icon: "🛒", match: "/orders" },
-      { href: "/customers", label: "Clientes", icon: "👥", match: "/customers" },
+      { href: "/", label: "Inicio", icon: "inicio" },
+      { href: "/orders/review", label: "Bodega", icon: "bodega" },
+      { href: "/orders", label: "Pedidos", icon: "pedidos", match: "/orders" },
+      { href: "/customers", label: "Clientes", icon: "clientes", match: "/customers" },
     ];
   }
   return [
-    { href: "/", label: "Inicio", icon: "🏠" },
-    { href: "/customers", label: "Clientes", icon: "👥", match: "/customers" },
-    { href: "/orders", label: "Pedidos", icon: "🛒", match: "/orders" },
-    { href: "/quotes", label: "Cotizar", icon: "📄", match: "/quotes" },
+    { href: "/", label: "Inicio", icon: "inicio" },
+    { href: "/customers", label: "Clientes", icon: "clientes", match: "/customers" },
+    { href: "/orders", label: "Pedidos", icon: "pedidos", match: "/orders" },
+    { href: "/quotes", label: "Cotizar", icon: "cotizaciones", match: "/quotes" },
   ];
 }
 
@@ -102,28 +104,28 @@ export function quickActions(role: string): NavItem[] {
     {
       href: "/orders/new",
       label: "Nuevo pedido",
-      icon: "🛒",
+      icon: "pedidos",
       roles: ["SELLER", "SUPERVISOR", "ADMIN"],
     },
     {
       href: "/quotes/new",
       label: "Nueva cotización",
-      icon: "📄",
+      icon: "cotizaciones",
       roles: ["SELLER", "SUPERVISOR", "ADMIN"],
     },
     {
       href: "/customers/new",
       label: "Nuevo cliente",
-      icon: "👥",
+      icon: "clientes",
       roles: ["SELLER", "SUPERVISOR", "ADMIN"],
     },
     {
       href: "/prospects/new",
       label: "Nuevo prospecto",
-      icon: "🎯",
+      icon: "prospectos",
       roles: ["SELLER", "SUPERVISOR", "ADMIN"],
     },
-    { href: "/products/new", label: "Nuevo producto", icon: "📦", roles: ["ADMIN"] },
+    { href: "/products/new", label: "Nuevo producto", icon: "productos", roles: ["ADMIN"] },
   ];
   return all.filter((i) => !i.roles || i.roles.includes(role));
 }

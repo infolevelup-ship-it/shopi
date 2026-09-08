@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -84,7 +85,7 @@ export function AppShell({
                         : "text-white/70 hover:bg-white/8 hover:text-white"
                     }`}
                   >
-                    <span aria-hidden>{item.icon}</span>
+                    <Icon name={item.icon} />
                     {item.label}
                   </Link>
                 </li>
@@ -181,7 +182,7 @@ export function AppShell({
                 href={a.href}
                 className="flex min-h-[48px] items-center gap-3 rounded-xl px-3 text-sm font-medium text-text hover:bg-surface-soft"
               >
-                <span aria-hidden>{a.icon}</span>
+                <Icon name={a.icon} />
                 {a.label}
               </Link>
             ))}
@@ -231,9 +232,7 @@ function MobileLink({ item, pathname }: { item: NavItem; pathname: string }) {
         active ? "font-semibold text-text" : "text-text-soft"
       }`}
     >
-      <span aria-hidden className="text-base">
-        {item.icon}
-      </span>
+      <Icon name={item.icon} className="h-5 w-5" />
       {item.label}
     </Link>
   );

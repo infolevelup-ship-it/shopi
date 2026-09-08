@@ -2,13 +2,29 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { submitOrderAction, cancelOrderAction } from "@/lib/actions/orders";
+import {
+  submitOrderAction,
+  cancelOrderAction,
+  deleteOrderAction,
+} from "@/lib/actions/orders";
 
-export function OrderActions({ orderId, status }: { orderId: string; status: string }) {
+export function OrderActions({
+  orderId,
+  orderNumber,
+  status,
+  isAdmin,
+}: {
+  orderId: string;
+  orderNumber: string;
+  status: string;
+  isAdmin: boolean;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [showDeleteForm, setShowDeleteForm] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
   const [isPending, startTransition] = useTransition();
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
@@ -30,8 +46,11 @@ export function OrderActions({ orderId, status }: { orderId: string; status: str
   // Cancelar sigue limitado a DRAFT/SUBMITTED, que es lo que acepta
   // `cancel_order`: un pedido ya revisado lo cancela un supervisor.
   const canCancel = status === "DRAFT" || status === "SUBMITTED";
+  // Un pedido facturado no se ofrece siquiera: la base lo rechaza igual, pero
+  // enseñar un botón que siempre falla es enseñar a ignorar los errores.
+  const canDelete = isAdmin && status !== "INVOICED" && status !== "INVOICING";
 
-  if (!canSubmit && !canCancel) return null;
+  if (!canSubmit && !canCancel && !canDelete) return null;
 
   return (
     <section className="card card-pad">
@@ -60,7 +79,56 @@ export function OrderActions({ orderId, status }: { orderId: string; status: str
             Cancelar pedido
           </button>
         )}
+        {canDelete && (
+          <button
+            disabled={isPending}
+            onClick={() => setShowDeleteForm((s) => !s)}
+            className="btn btn-tertiary btn-block-mobile text-danger"
+          >
+            Eliminar
+          </button>
+        )}
       </div>
+
+      {/* Escribir el consecutivo, no un "¿seguro?": el borrado no tiene vuelta
+          atrás y el número obliga a mirar cuál pedido se está borrando. */}
+      {showDeleteForm && (
+        <div className="mt-3 rounded-xl border border-danger/30 bg-danger-bg p-3">
+          <p className="text-sm text-[#b42318]">
+            Esto <strong>borra el pedido y su historial</strong> para siempre. No es cancelar:
+            no queda rastro en la lista. Es para limpiar pruebas.
+          </p>
+          <label htmlFor="borrar-confirm" className="field-label mt-2">
+            Escribe <span className="font-mono">{orderNumber}</span> para confirmar
+          </label>
+          <input
+            id="borrar-confirm"
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            className="input"
+            placeholder={orderNumber}
+          />
+          <button
+            disabled={isPending || deleteConfirm.trim() !== orderNumber}
+            onClick={() => {
+              setError(null);
+              startTransition(async () => {
+                const r = await deleteOrderAction(orderId, "Borrado desde el detalle del pedido");
+                if (!r.ok) {
+                  setError(r.error);
+                  return;
+                }
+                // El pedido ya no existe: quedarse en su página daría un 404.
+                router.push("/orders");
+                router.refresh();
+              });
+            }}
+            className="btn btn-danger btn-sm btn-block-mobile mt-2"
+          >
+            {isPending ? "Eliminando…" : "Eliminar definitivamente"}
+          </button>
+        </div>
+      )}
 
       {showCancelForm && (
         <div className="mt-3 rounded-xl border border-line bg-surface-soft p-3">
