@@ -25,6 +25,8 @@ export type CustomerImportResult =
       ok: true;
       importadosAhora: number;
       omitidos: number;
+      /** Venían con un documento que ya traía otro tercero en la misma tanda. */
+      duplicados: number;
       cursor: ImportCursor;
     }
   | { ok: false; error: string };
@@ -124,13 +126,14 @@ export async function importCustomersFromSiigoAction(
     : await getImportCursor();
 
   if (cursor.done && !reiniciar) {
-    return { ok: true, importadosAhora: 0, omitidos: 0, cursor };
+    return { ok: true, importadosAhora: 0, omitidos: 0, duplicados: 0, cursor };
   }
 
   const arranque = Date.now();
   let page = cursor.page;
   let importadosAhora = 0;
   let omitidos = 0;
+  let duplicados = 0;
   let total = cursor.total;
   let terminado = false;
 
@@ -151,13 +154,20 @@ export async function importCustomersFromSiigoAction(
         // Va por función y no por upsert de PostgREST: el índice único de
         // documento es parcial (`where merged_into_customer_id is null`) y un
         // `on conflict (cols)` sin ese predicado lo rechaza Postgres.
-        const { error } = await supabase.rpc("import_siigo_customers", {
+        const { data, error } = await supabase.rpc("import_siigo_customers", {
           p_customers: filas,
         });
         if (error) {
-          return { ok: false, error: `No se pudieron guardar los clientes: ${error.message}` };
+          // Se lanza en vez de retornar para pasar por el `catch`, que sí
+          // guarda el cursor. Si no, las páginas ya importadas en esta misma
+          // pulsación se volverían a pedir en la siguiente.
+          throw new Error(`No se pudieron guardar los clientes: ${error.message}`);
         }
-        importadosAhora += filas.length;
+        // Se cuenta lo que la función dice haber guardado, no lo que se envió:
+        // Siigo repite terceros con el mismo documento y esos se descartan.
+        const resumen = (data ?? {}) as { guardados?: number; duplicados?: number };
+        importadosAhora += resumen.guardados ?? filas.length;
+        duplicados += resumen.duplicados ?? 0;
       }
 
       page += 1;
@@ -192,7 +202,7 @@ export async function importCustomersFromSiigoAction(
   };
   await guardarCursor(serviceClient, nuevo);
 
-  return { ok: true, importadosAhora, omitidos, cursor: nuevo };
+  return { ok: true, importadosAhora, omitidos, duplicados, cursor: nuevo };
 }
 
 async function guardarCursor(

@@ -405,6 +405,15 @@ export function IntegrationPanel({
                 reconocemos. Revísalos en Siigo.
               </p>
             )}
+            {/* Dos terceros distintos en Siigo con el mismo documento. Aquí no
+                pueden coexistir: el documento es lo que identifica al cliente
+                en la factura. Se guarda el primero y se avisa. */}
+            {importe.duplicados > 0 && (
+              <p className="mt-1 text-[#b54708]">
+                ⚠ {importe.duplicados} venían repetidos con el mismo documento que otro tercero.
+                Se guardó el primero de cada uno; conviene unificarlos en Siigo.
+              </p>
+            )}
           </div>
         )}
 
