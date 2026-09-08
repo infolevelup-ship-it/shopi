@@ -416,6 +416,7 @@ export default async function OrderDetailPage({
               isUncertain={isUncertain}
               uncertainMessage={uncertainMessage}
               invoice={invoiceInfo}
+              esDocumentoDePrueba={integraciones.isTestDocument}
             />
           )}
 

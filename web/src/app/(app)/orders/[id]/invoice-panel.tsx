@@ -25,6 +25,13 @@ export type InvoicePanelProps = {
     total: number | null;
   } | null;
   status: string;
+  /**
+   * Si el documento configurado no es la factura electrónica. Se recibe en vez
+   * de deducirlo aquí para que el aviso de la página y el texto de este panel
+   * salgan del mismo dato: dos pantallas contradiciéndose sobre si algo llega
+   * a la DIAN es peor que no avisar.
+   */
+  esDocumentoDePrueba: boolean;
 };
 
 export function InvoicePanel({
@@ -38,6 +45,7 @@ export function InvoicePanel({
   uncertainMessage,
   invoice,
   status,
+  esDocumentoDePrueba,
 }: InvoicePanelProps) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -196,7 +204,8 @@ export function InvoicePanel({
       <section className="card card-pad border-info/30 bg-info-bg">
         <p className="font-semibold text-[#175cd3]">Facturando…</p>
         <p className="mt-1 text-sm text-[#175cd3]">
-          Se está generando la factura electrónica. No vuelvas a facturar este pedido.
+          Se está generando {esDocumentoDePrueba ? "el documento de ingreso" : "la factura electrónica"} en
+          Siigo. No vuelvas a facturar este pedido.
         </p>
       </section>
     );
@@ -223,21 +232,29 @@ export function InvoicePanel({
         <>
           <h2 className="text-base font-semibold">Facturación</h2>
           <p className="mt-1 mb-3 text-sm text-text-soft">
-            El pedido está aprobado. Al facturar se genera la factura electrónica en Siigo.
+            El pedido está aprobado. Al facturar se genera{" "}
+            {esDocumentoDePrueba
+              ? "un documento de ingreso (modo de pruebas)"
+              : "la factura electrónica"}{" "}
+            en Siigo.
           </p>
           <button
             type="button"
             onClick={() => setConfirming(true)}
             className="btn btn-primary btn-block-mobile"
           >
-            Facturar en Siigo
+            {esDocumentoDePrueba ? "Emitir documento de prueba" : "Facturar en Siigo"}
           </button>
         </>
       ) : (
         // doc 11 §43: la confirmación repite los datos del pedido y dice
         // explícitamente que esto genera un documento fiscal.
         <div>
-          <h2 className="text-base font-semibold">Vas a generar una factura electrónica</h2>
+          <h2 className="text-base font-semibold">
+            {esDocumentoDePrueba
+              ? "Vas a generar un documento de ingreso (prueba)"
+              : "Vas a generar una factura electrónica"}
+          </h2>
           <dl className="mt-3 grid gap-1 text-sm">
             <div className="flex justify-between">
               <dt className="text-text-soft">Pedido</dt>
@@ -252,10 +269,22 @@ export function InvoicePanel({
               <dd className="font-medium">{formatMoney(grandTotal)}</dd>
             </div>
           </dl>
-          <p className="mt-3 text-sm font-medium text-danger">
-            Esta acción genera un documento fiscal. Una vez emitida, la factura no se elimina
-            como un pedido normal.
-          </p>
+          {/* La irreversibilidad es el motivo de que exista esta confirmación,
+              y solo aplica al documento real. Decir "no se puede deshacer"
+              cuando sí se puede enseña a ignorar el aviso; decir lo contrario
+              cuando no se puede es peor. */}
+          {esDocumentoDePrueba ? (
+            <p className="mt-3 text-sm font-medium text-[#b54708]">
+              Es un documento de ingreso: <strong>no llega a la DIAN</strong>, no sirve como
+              factura y sí se puede eliminar en Siigo. Para emitir la factura real hay que
+              cambiar el documento en Configuración.
+            </p>
+          ) : (
+            <p className="mt-3 text-sm font-medium text-danger">
+              Esta acción genera un documento fiscal. Una vez emitida, la factura no se elimina
+              como un pedido normal.
+            </p>
+          )}
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
@@ -263,7 +292,11 @@ export function InvoicePanel({
               onClick={facturar}
               className="btn btn-primary btn-block-mobile"
             >
-              {isPending ? "Facturando…" : "Confirmar y facturar"}
+              {isPending
+                ? "Enviando…"
+                : esDocumentoDePrueba
+                  ? "Confirmar y emitir prueba"
+                  : "Confirmar y facturar"}
             </button>
             <button
               type="button"
