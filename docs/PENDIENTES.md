@@ -937,9 +937,29 @@ escritos en `app_settings`:
   ESTILISTA INDEPENDIENTE y 1050 TIENDAS (inactivo), hoy sin usar.
 - `siigo_payment_types` → ver abajo.
 - `siigo_seller_map` → **no se pudo llenar**: la tabla `users` solo tiene los 4 usuarios de prueba
-  y el admin. Hay que crearlo cuando existan las vendedoras reales. Los ids de Siigo ya se
-  conocen: Karina Noriega 3375, Ivonne Daza 142, Melissa 3651, Sandra Ayala 3565, Carlos
-  (Logística) 1826.
+  y el admin. Hay que crearlo cuando existan las vendedoras reales.
+
+### Equipo real: ids de Siigo y de GHL
+
+Son **dos numeraciones distintas** y ninguna sirve en lugar de la otra: el id de Siigo identifica
+al vendedor en la factura, el de GHL al dueño de la oportunidad. Por eso van juntos por persona.
+
+| Persona | Correo | Rol GHL | GHL user id | Siigo seller id | ¿Existe en la app? |
+|---|---|---|---|---|---|
+| Ferney Aponte | ferney25898@gmail.com | admin | `IZFkiNca9Lmbirftqx2C` | — | **Sí** (ADMIN), ya cargado |
+| Ivonne Daza | ivonnedazav@gmail.com | admin | `N4xqjZOCrv7DfXk1jOQc` | 142 | No |
+| Karina Noriega | comercialproductoswow@gmail.com | admin | `0b6EU5KbJBc69PazOwCR` | 3375 | No |
+| Logística Wow (Carlos) | logistica@productoswow.com | user | `Szixj7uiGdKPjAiYBuPz` | 1826 | No |
+| Melissa Comercial1 | onlineventasredes@gmail.com | user | `PlluEp4vYC4bk1NLk1CE` | 3651 | No |
+| Sandra Ayala | comercialwowbogota@gmail.com | user | `caU6JUyjfHRO6pKz5FO7` | 3565 | No |
+| Silvia Lombana | marketingproductoswow@gmail.com | admin | `bnXGuAa2rBrjucV0weuF` | — | No |
+
+Cuidado al emparejar: la usuaria de demostración **"Karina Ríos"** (`karina.vendedora@…test`) no
+es **Karina Noriega**. Son personas distintas y el correo es lo único que lo distingue con
+certeza; emparejar por nombre le asignaría las oportunidades y las facturas a quien no es.
+
+- [ ] Crear las 6 usuarias reales en `users` (con su login) y cargarles `ghl_user_id` de la tabla
+      de arriba y `siigo_seller_map` con el id de Siigo.
 
 Dos huecos reales del `InvoiceService` que salieron al configurar esto, ya corregidos:
 
