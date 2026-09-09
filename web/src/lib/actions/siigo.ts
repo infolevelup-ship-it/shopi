@@ -13,6 +13,26 @@ import {
   SiigoApiError,
 } from "@/lib/siigo/client";
 
+// `SiigoApiError.message` es siempre un texto fijo — "Error actualizando
+// tercero en Siigo", igual sin importar la causa. El motivo real que Siigo
+// devuelve (documento duplicado, campo inválido, tercero con movimientos que
+// no se puede editar) viaja en `.body`, y se estaba perdiendo en el camino:
+// ni llegaba al mensaje que ve quien usa la pantalla, ni quedaba en
+// integration_logs para revisarlo después. El resultado era que cualquier
+// fallo, sin importar la causa, se veía exactamente igual — "Error
+// actualizando tercero en Siigo" — y no había manera de saber por qué sin
+// volver a intentarlo y adivinar.
+function detalleSiigoError(err: unknown): { message: string; httpStatus: number | null } {
+  if (err instanceof SiigoApiError) {
+    const cuerpo = err.body?.trim();
+    return {
+      message: cuerpo ? `${err.message}: ${cuerpo.slice(0, 500)}` : err.message,
+      httpStatus: err.status,
+    };
+  }
+  return { message: err instanceof Error ? err.message : "Error desconocido", httpStatus: null };
+}
+
 // Fase 7 (doc 10 §10, "lectura" + "create customer" — facturar queda
 // deliberadamente fuera de esta pasada, doc 01 §18). `customers.siigo_customer_id`
 // y `products.stock_cache` no tienen política de UPDATE (mismo diseño que
@@ -106,8 +126,7 @@ export async function syncCustomerToSiigoAction(customerId: string): Promise<Cus
 
     return { ok: true, outcome, siigoCustomerId: siigoId };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Error desconocido";
-    const httpStatus = err instanceof SiigoApiError ? err.status : null;
+    const { message, httpStatus } = detalleSiigoError(err);
     await serviceClient.from("integration_logs").insert({
       system: "SIIGO",
       operation: "CUSTOMER_SYNC",
@@ -195,8 +214,7 @@ export async function syncOrderProductStockAction(orderId: string): Promise<Stoc
       });
       updated++;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error desconocido";
-      const httpStatus = err instanceof SiigoApiError ? err.status : null;
+      const { message, httpStatus } = detalleSiigoError(err);
       await serviceClient.from("integration_logs").insert({
         system: "SIIGO",
         operation: "STOCK_SYNC",
@@ -273,8 +291,7 @@ export async function pushCustomerUpdateToSiigoAction(
     });
     return { outcome: "ok" };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Error desconocido";
-    const httpStatus = err instanceof SiigoApiError ? err.status : null;
+    const { message, httpStatus } = detalleSiigoError(err);
     await serviceClient.from("integration_logs").insert({
       system: "SIIGO",
       operation: "CUSTOMER_UPDATE",
