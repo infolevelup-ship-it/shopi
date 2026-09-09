@@ -107,11 +107,19 @@ export function OrderForm({
   orderId,
   initial,
   preselectedCustomerId = null,
+  currentUserId,
 }: {
   mode: "create" | "edit";
   orderId?: string;
   initial?: OrderFormInitial;
   preselectedCustomerId?: string | null;
+  /**
+   * Para avisar cuando el cliente elegido no es propio: "no es el mío pero
+   * tiene vendedora" es un caso normal (una compañera lo atiende por una
+   * emergencia), no un error. Sin este id no se puede distinguir de "es mi
+   * cliente", así que el aviso simplemente no sale.
+   */
+  currentUserId?: string;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
@@ -160,6 +168,17 @@ export function OrderForm({
   // una. Antes eso solo se descubría al pulsar "Crear pedido", con el
   // formulario entero lleno; ahora se resuelve al elegir el cliente.
   const sinResponsable = !!customer && !customer.responsible_user_id;
+  // Caso distinto: el cliente SÍ tiene vendedora, pero no es quien está
+  // armando este pedido. No es un error — es justo lo que pasa cuando alguien
+  // cubre a una compañera que no está, así que solo se informa: el pedido
+  // queda a nombre de quien lo crea (seller_id) y el cliente le sigue
+  // perteneciendo a su responsable (responsible_customer_owner_id se guarda
+  // aparte en create_order). No bloquea nada.
+  const esClienteDeOtra =
+    !!customer &&
+    !!customer.responsible_user_id &&
+    !!currentUserId &&
+    customer.responsible_user_id !== currentUserId;
 
   function hacerseResponsable() {
     if (!customer) return;
@@ -433,6 +452,18 @@ export function OrderForm({
                   </button>
                 </div>
               )}
+
+              {/* Informativo, no bloquea nada: cubrir a una compañera que no
+                  está es un caso normal. El cliente sigue siendo de ella —
+                  este pedido solo queda a nombre de quien lo está creando. */}
+              {esClienteDeOtra && (
+                <div className="mt-2 rounded-xl border border-info/40 bg-info-bg p-3 text-sm text-[#175cd3]">
+                  Este cliente lo atiende normalmente{" "}
+                  <strong>{customer.responsible_name}</strong>. Puedes tomar el
+                  pedido igual — el cliente sigue siendo de{" "}
+                  {customer.responsible_name}; este pedido queda a tu nombre.
+                </div>
+              )}
             </>
           ) : (
             <div className="relative">
@@ -459,6 +490,10 @@ export function OrderForm({
                       </span>
                       <span className="block text-sm text-text-soft">
                         {c.document_type} {c.document_number}
+                        {/* Visible antes de elegir: si es de otra vendedora, se
+                            sabe de una vez y no hace falta seleccionarlo para
+                            enterarse. */}
+                        {c.responsible_name ? ` · ${c.responsible_name}` : ""}
                       </span>
                     </button>
                   ))}

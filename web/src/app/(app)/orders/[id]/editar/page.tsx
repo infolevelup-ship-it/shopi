@@ -7,7 +7,11 @@ import { OrderForm, type OrderFormLine } from "@/components/order-form";
 import type { PriceList } from "@/lib/ui/fiscal";
 import { EDITABLE_ORDER_STATUSES } from "@/lib/ui/status";
 
-export default async function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditOrderPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const supabase = await createClient();
 
@@ -38,13 +42,17 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
 
   const { data: items } = await supabase
     .from("order_items")
-    .select("product_id, product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_percent")
+    .select(
+      "product_id, product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_percent",
+    )
     .eq("order_id", id)
     .order("created_at", { ascending: true });
 
   // `order_items` guarda el precio con el que se vendió, no las tres listas;
   // se traen los productos para que cambiar de lista siga re-tarifando.
-  const productIds = (items ?? []).map((i) => i.product_id).filter((v): v is string => !!v);
+  const productIds = (items ?? [])
+    .map((i) => i.product_id)
+    .filter((v): v is string => !!v);
   const products = await getProductsByIds([...new Set(productIds)]);
   const byId = new Map(products.map((p) => [p.id, p]));
 
@@ -74,16 +82,16 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
       };
     });
 
-  const customer = Array.isArray(order.customer) ? order.customer[0] : order.customer;
+  const customer = Array.isArray(order.customer)
+    ? order.customer[0]
+    : order.customer;
 
   return (
     <OrderForm
       mode="edit"
       orderId={order.id}
       initial={{
-        customer: customer
-          ? { ...customer, responsible_name: null }
-          : null,
+        customer: customer ? { ...customer, responsible_name: null } : null,
         lines,
         channel: order.channel === "B2C" ? "B2C" : "B2B",
         priceList: (order.price_list as PriceList | null) ?? "salon",
@@ -93,6 +101,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
         retentionPercent: Number(order.retention_percent ?? 0),
         notes: order.notes ?? "",
       }}
+      currentUserId={profile?.id}
     />
   );
 }

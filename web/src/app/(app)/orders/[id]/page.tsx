@@ -10,10 +10,23 @@ import { GhlSyncStatus } from "./ghl-sync-status";
 import { FiscalCard } from "./fiscal-card";
 import { ReceiptsPanel } from "./receipts-panel";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
-import { customerDisplayName, formatMoney, formatNumber } from "@/lib/ui/format";
+import {
+  customerDisplayName,
+  formatMoney,
+  formatNumber,
+} from "@/lib/ui/format";
 import { precioSospechoso } from "@/lib/ui/precios";
-import { EDITABLE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, statusMeta } from "@/lib/ui/status";
-import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, labelOf } from "@/lib/ui/fiscal";
+import {
+  EDITABLE_ORDER_STATUSES,
+  PAYMENT_METHOD_LABEL,
+  statusMeta,
+} from "@/lib/ui/status";
+import {
+  PAYMENT_DETAILS,
+  PRICE_LISTS,
+  SALE_ORIGINS,
+  labelOf,
+} from "@/lib/ui/fiscal";
 import { listOrderReceipts } from "@/lib/actions/receipts";
 import { getIntegrationSettings } from "@/lib/actions/integrations";
 
@@ -38,7 +51,7 @@ export default async function OrderDetailPage({
   // doc 11 §64: bodega necesita la ficha fiscal del cliente sin salir del
   // pedido — por eso el select trae también los campos de facturación.
   const ORDER_SELECT =
-    "id, order_number, status, channel, price_list, payment_method, payment_method_detail, sale_origin, retention_percent, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, return_reason, seller_id, ghl_sync_status, ghl_sync_error, customer:customers(id, legal_name, first_name, last_name, commercial_name, document_type, document_number, email, phone, address, city, fiscal_responsibility, siigo_customer_id), seller:users!orders_seller_id_fkey(name)";
+    "id, order_number, status, channel, price_list, payment_method, payment_method_detail, sale_origin, retention_percent, subtotal_gross, discount_total, subtotal_net, tax_total, retention_total, grand_total, notes, created_at, submitted_at, cancelled_at, cancellation_reason, return_reason, seller_id, responsible_customer_owner_id, ghl_sync_status, ghl_sync_error, customer:customers(id, legal_name, first_name, last_name, commercial_name, document_type, document_number, email, phone, address, city, fiscal_responsibility, siigo_customer_id), seller:users!orders_seller_id_fkey(name), responsible_owner:users!orders_responsible_customer_owner_id_fkey(name)";
 
   const [{ data: initialOrder }, profile] = await Promise.all([
     supabase.from("orders").select(ORDER_SELECT).eq("id", id).maybeSingle(),
@@ -56,10 +69,17 @@ export default async function OrderDetailPage({
   // página igual se renderiza con el estado que sí exista.
   const isReviewer =
     !!profile &&
-    (profile.role === "WAREHOUSE" || profile.role === "SUPERVISOR" || profile.role === "ADMIN");
+    (profile.role === "WAREHOUSE" ||
+      profile.role === "SUPERVISOR" ||
+      profile.role === "ADMIN");
   let order = initialOrder;
-  if (isReviewer && (order.status === "SUBMITTED" || order.status === "PENDING_REVIEW")) {
-    const { data: reviewed } = await supabase.rpc("start_order_review", { p_order_id: id });
+  if (
+    isReviewer &&
+    (order.status === "SUBMITTED" || order.status === "PENDING_REVIEW")
+  ) {
+    const { data: reviewed } = await supabase.rpc("start_order_review", {
+      p_order_id: id,
+    });
     if (reviewed) {
       const { data: refreshed } = await supabase
         .from("orders")
@@ -78,17 +98,33 @@ export default async function OrderDetailPage({
     .eq("order_id", id)
     .order("created_at", { ascending: true });
 
-  const customer = Array.isArray(order.customer) ? order.customer[0] : order.customer;
+  const customer = Array.isArray(order.customer)
+    ? order.customer[0]
+    : order.customer;
   const seller = Array.isArray(order.seller) ? order.seller[0] : order.seller;
+  const responsibleOwner = Array.isArray(order.responsible_owner)
+    ? order.responsible_owner[0]
+    : order.responsible_owner;
+  // El pedido guarda por separado quién lo tomó (seller_id) y de quién es el
+  // cliente (responsible_customer_owner_id): son distintos cuando alguien
+  // atendió por emergencia un cliente que no es suyo. Se avisa solo en ese
+  // caso — mostrarlo siempre sería ruido, porque casi siempre son la misma
+  // persona.
+  const tomadoPorOtra =
+    !!responsibleOwner &&
+    order.seller_id !== order.responsible_customer_owner_id;
 
   const canAct =
     !!profile &&
-    (profile.id === order.seller_id || profile.role === "SUPERVISOR" || profile.role === "ADMIN");
+    (profile.id === order.seller_id ||
+      profile.role === "SUPERVISOR" ||
+      profile.role === "ADMIN");
   const canReview = isReviewer && order.status === "IN_REVIEW";
   const canEditOrder = canAct && EDITABLE_ORDER_STATUSES.includes(order.status);
   // doc 01 §18 / doc 05 §6: solo bodega o admin factura — supervisor queda
   // fuera por defecto (doc 05 §6 lo marca "según política" sin definirla).
-  const canInvoice = !!profile && (profile.role === "WAREHOUSE" || profile.role === "ADMIN");
+  const canInvoice =
+    !!profile && (profile.role === "WAREHOUSE" || profile.role === "ADMIN");
   const isAdmin = profile?.role === "ADMIN";
 
   // Comprobantes (doc 01 §17, doc 11 §80). Subir: cualquiera que pueda ver el
@@ -161,13 +197,17 @@ export default async function OrderDetailPage({
         subtitle={
           <>
             {customer ? (
-              <Link href={`/customers/${customer.id}`} className="hover:underline">
+              <Link
+                href={`/customers/${customer.id}`}
+                className="hover:underline"
+              >
                 {customerDisplayName(customer)}
               </Link>
             ) : (
               "(sin cliente)"
             )}
             {seller?.name ? ` · Vendedora: ${seller.name}` : ""}
+            {tomadoPorOtra ? ` (cliente de ${responsibleOwner!.name})` : ""}
           </>
         }
         actions={
@@ -178,7 +218,10 @@ export default async function OrderDetailPage({
                 la vendedora — son las mismas dos condiciones que aplica
                 `update_order` en la base. */}
             {canEditOrder && (
-              <Link href={`/orders/${order.id}/editar`} className="btn btn-secondary btn-sm">
+              <Link
+                href={`/orders/${order.id}/editar`}
+                className="btn btn-secondary btn-sm"
+              >
                 Editar
               </Link>
             )}
@@ -198,7 +241,9 @@ export default async function OrderDetailPage({
       {/* doc 11 §95: cada estado dice qué significa y de quién es la pelota */}
       <p className="mb-5 text-sm text-text-soft">
         {meta.meaning}
-        {meta.owner && meta.owner !== "—" ? ` · Responsable ahora: ${meta.owner}` : ""}
+        {meta.owner && meta.owner !== "—"
+          ? ` · Responsable ahora: ${meta.owner}`
+          : ""}
       </p>
 
       <div className="grid gap-5">
@@ -228,8 +273,9 @@ export default async function OrderDetailPage({
           {isReviewer && anyStockMissing && (
             <div className="mb-4">
               <Callout tone="warning" title="Inventario sin datos">
-                Algunos productos no están sincronizados con Siigo todavía, así que no hay
-                inventario que mostrar para ellos. Verifica físicamente antes de aprobar.
+                Algunos productos no están sincronizados con Siigo todavía, así
+                que no hay inventario que mostrar para ellos. Verifica
+                físicamente antes de aprobar.
               </Callout>
             </div>
           )}
@@ -247,14 +293,20 @@ export default async function OrderDetailPage({
               </thead>
               <tbody>
                 {(items ?? []).map((item) => {
-                  const product = Array.isArray(item.product) ? item.product[0] : item.product;
+                  const product = Array.isArray(item.product)
+                    ? item.product[0]
+                    : item.product;
                   const stock = product?.stock_cache ?? null;
                   const short = stock !== null && stock < Number(item.quantity);
                   return (
                     <tr key={item.id}>
                       <td>
-                        <span className="font-medium">{item.product_name_snapshot}</span>
-                        <div className="text-xs text-text-soft">{item.product_code_snapshot}</div>
+                        <span className="font-medium">
+                          {item.product_name_snapshot}
+                        </span>
+                        <div className="text-xs text-text-soft">
+                          {item.product_code_snapshot}
+                        </div>
                       </td>
                       <td className="text-right">{item.quantity}</td>
                       <td className="text-right">
@@ -272,10 +324,16 @@ export default async function OrderDetailPage({
                         <td
                           className={`text-right ${short ? "font-semibold text-danger" : "text-text-soft"}`}
                         >
-                          {stock === null ? "sin datos" : short ? `solo ${formatNumber(stock)}` : formatNumber(stock)}
+                          {stock === null
+                            ? "sin datos"
+                            : short
+                              ? `solo ${formatNumber(stock)}`
+                              : formatNumber(stock)}
                         </td>
                       )}
-                      <td className="text-right font-medium">{formatMoney(item.line_total)}</td>
+                      <td className="text-right font-medium">
+                        {formatMoney(item.line_total)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -286,18 +344,24 @@ export default async function OrderDetailPage({
           {/* doc 11 §34: en móvil el producto es una tarjeta, nunca una tabla */}
           <ul className="mobile-only grid gap-2">
             {(items ?? []).map((item) => {
-              const product = Array.isArray(item.product) ? item.product[0] : item.product;
+              const product = Array.isArray(item.product)
+                ? item.product[0]
+                : item.product;
               const stock = product?.stock_cache ?? null;
               const short = stock !== null && stock < Number(item.quantity);
               return (
                 <li key={item.id} className="rounded-xl border border-line p-3">
                   <div className="flex items-start justify-between gap-3">
-                    <span className="font-medium">{item.product_name_snapshot}</span>
+                    <span className="font-medium">
+                      {item.product_name_snapshot}
+                    </span>
                     <span className="font-semibold whitespace-nowrap">
                       {formatMoney(item.line_total)}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-text-soft">{item.product_code_snapshot}</p>
+                  <p className="mt-1 text-xs text-text-soft">
+                    {item.product_code_snapshot}
+                  </p>
                   <p
                     className={`mt-1 text-sm ${
                       precioSospechoso(item.unit_price)
@@ -309,8 +373,15 @@ export default async function OrderDetailPage({
                     {precioSospechoso(item.unit_price) ? " ⚠" : ""}
                   </p>
                   {isReviewer && (
-                    <p className={`mt-1 text-sm ${short ? "font-medium text-danger" : "text-text-soft"}`}>
-                      Inventario: {stock === null ? "sin datos" : short ? `solo ${formatNumber(stock)}` : formatNumber(stock)}
+                    <p
+                      className={`mt-1 text-sm ${short ? "font-medium text-danger" : "text-text-soft"}`}
+                    >
+                      Inventario:{" "}
+                      {stock === null
+                        ? "sin datos"
+                        : short
+                          ? `solo ${formatNumber(stock)}`
+                          : formatNumber(stock)}
                     </p>
                   )}
                 </li>
@@ -321,7 +392,10 @@ export default async function OrderDetailPage({
           {/* --------------------------------------------------- totales */}
           <dl className="mt-4 space-y-1 border-t border-line pt-4 text-sm">
             <Row label="Subtotal" value={formatMoney(order.subtotal_gross)} />
-            <Row label="Descuento" value={`-${formatMoney(order.discount_total)}`} />
+            <Row
+              label="Descuento"
+              value={`-${formatMoney(order.discount_total)}`}
+            />
             <Row label="IVA" value={formatMoney(order.tax_total)} />
             {order.retention_total > 0 && (
               <Row
@@ -341,7 +415,10 @@ export default async function OrderDetailPage({
             {order.payment_method && (
               <Condition
                 label="Forma de pago"
-                value={PAYMENT_METHOD_LABEL[order.payment_method] ?? order.payment_method}
+                value={
+                  PAYMENT_METHOD_LABEL[order.payment_method] ??
+                  order.payment_method
+                }
               />
             )}
             {order.payment_method_detail && (
@@ -353,17 +430,27 @@ export default async function OrderDetailPage({
             {order.price_list && (
               <Condition
                 label="Lista de precio"
-                value={PRICE_LISTS.find((p) => p.value === order.price_list)?.label ?? order.price_list}
+                value={
+                  PRICE_LISTS.find((p) => p.value === order.price_list)
+                    ?.label ?? order.price_list
+                }
               />
             )}
-            {order.channel && <Condition label="Tipo de venta" value={order.channel} />}
+            {order.channel && (
+              <Condition label="Tipo de venta" value={order.channel} />
+            )}
             {order.sale_origin && (
-              <Condition label="Origen de la venta" value={labelOf(SALE_ORIGINS, order.sale_origin)} />
+              <Condition
+                label="Origen de la venta"
+                value={labelOf(SALE_ORIGINS, order.sale_origin)}
+              />
             )}
           </dl>
 
           {order.notes && (
-            <p className="mt-3 border-t border-line pt-3 text-sm text-text-soft">{order.notes}</p>
+            <p className="mt-3 border-t border-line pt-3 text-sm text-text-soft">
+              {order.notes}
+            </p>
           )}
         </section>
 
@@ -385,19 +472,22 @@ export default async function OrderDetailPage({
           isReviewer &&
           !integraciones.siigoEnabled && (
             <Callout tone="danger" title="Siigo está desconectado">
-              Nadie puede facturar mientras la integración esté apagada. Un administrador la
-              enciende en Configuración.
+              Nadie puede facturar mientras la integración esté apagada. Un
+              administrador la enciende en Configuración.
             </Callout>
           )}
 
-        {(order.status === "APPROVED_FOR_INVOICE" || order.status === "INVOICING") &&
+        {(order.status === "APPROVED_FOR_INVOICE" ||
+          order.status === "INVOICING") &&
           isReviewer &&
           integraciones.siigoEnabled &&
           integraciones.isTestDocument && (
             <Callout tone="danger" title="⚠ MODO DE PRUEBAS ACTIVO">
-              Este pedido se va a emitir como <strong>documento de ingreso</strong>, que{" "}
-              <strong>no llega a la DIAN</strong> y no sirve como factura legal. Si es una venta
-              real, hay que cambiarlo en Configuración antes de facturar.
+              Este pedido se va a emitir como{" "}
+              <strong>documento de ingreso</strong>, que{" "}
+              <strong>no llega a la DIAN</strong> y no sirve como factura legal.
+              Si es una venta real, hay que cambiarlo en Configuración antes de
+              facturar.
             </Callout>
           )}
 

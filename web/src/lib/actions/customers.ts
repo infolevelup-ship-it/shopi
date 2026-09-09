@@ -1,8 +1,20 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth";
 import { syncCustomerToGhlAction } from "@/lib/actions/ghl";
 import { pushCustomerUpdateToSiigoAction } from "@/lib/actions/siigo";
+
+/**
+ * El id del usuario WOW actual, para el formulario de pedido que se arma en
+ * el cliente: es "use client" (necesita useSearchParams) y getCurrentProfile
+ * depende de las cookies de la petición, que un componente cliente no puede
+ * leer. Solo el id — nada de la sesión pasa al navegador de más.
+ */
+export async function getCurrentUserIdAction(): Promise<string | null> {
+  const profile = await getCurrentProfile();
+  return profile?.id ?? null;
+}
 
 function normalizeDocument(raw: string) {
   return raw.replace(/\D/g, "");
@@ -23,7 +35,9 @@ export type CustomerSearchResult = {
   responsible_name: string | null;
 };
 
-export async function searchCustomers(query: string): Promise<CustomerSearchResult[]> {
+export async function searchCustomers(
+  query: string,
+): Promise<CustomerSearchResult[]> {
   const q = query.trim();
   if (!q) return [];
 
@@ -68,7 +82,9 @@ export async function searchCustomers(query: string): Promise<CustomerSearchResu
 // Para llegar a "crear pedido" desde la ficha del cliente con el cliente ya
 // puesto (doc 11 §49/§83: no hacerla buscar de nuevo lo que ya tenía en
 // pantalla).
-export async function getCustomerForPicker(id: string): Promise<CustomerSearchResult | null> {
+export async function getCustomerForPicker(
+  id: string,
+): Promise<CustomerSearchResult | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("customers")
@@ -109,13 +125,17 @@ export type CustomerListRow = CustomerSearchResult & {
 // que no muestra nada hasta que alguien escribe. Sin término de búsqueda
 // devuelve los más recientes.
 export async function listCustomers(query: string): Promise<CustomerListRow[]> {
-  const base = query.trim() ? await searchCustomers(query) : await recentCustomers();
+  const base = query.trim()
+    ? await searchCustomers(query)
+    : await recentCustomers();
   if (base.length === 0) return [];
 
   const supabase = await createClient();
   const { data: metrics } = await supabase
     .from("customer_metrics")
-    .select("customer_id, last_order_at, average_ticket, is_at_risk, days_since_last_order")
+    .select(
+      "customer_id, last_order_at, average_ticket, is_at_risk, days_since_last_order",
+    )
     .in(
       "customer_id",
       base.map((c) => c.id),
@@ -128,9 +148,13 @@ export async function listCustomers(query: string): Promise<CustomerListRow[]> {
     return {
       ...c,
       lastOrderAt: m?.last_order_at ?? null,
-      averageTicket: m?.average_ticket != null ? Number(m.average_ticket) : null,
+      averageTicket:
+        m?.average_ticket != null ? Number(m.average_ticket) : null,
       isAtRisk: m?.is_at_risk ?? false,
-      daysSinceLastOrder: m?.days_since_last_order != null ? Number(m.days_since_last_order) : null,
+      daysSinceLastOrder:
+        m?.days_since_last_order != null
+          ? Number(m.days_since_last_order)
+          : null,
     };
   });
 }
@@ -146,7 +170,8 @@ async function recentCustomers(): Promise<CustomerSearchResult[]> {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  if (error) throw new Error(`No se pudieron cargar clientes: ${error.message}`);
+  if (error)
+    throw new Error(`No se pudieron cargar clientes: ${error.message}`);
 
   return (data ?? []).map((c) => ({
     id: c.id,
@@ -198,7 +223,10 @@ export async function checkDuplicateCustomer(
     first_name: string | null;
     last_name: string | null;
     commercial_name: string | null;
-  }) => c.commercial_name ?? c.legal_name ?? `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
+  }) =>
+    c.commercial_name ??
+    c.legal_name ??
+    `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
 
   let phoneMatches: DuplicateCheckResult["phoneMatches"] = [];
   if (phone && phone.trim()) {
@@ -210,7 +238,9 @@ export async function checkDuplicateCustomer(
       .limit(5);
 
     if (phoneError) {
-      throw new Error(`No se pudo validar duplicados por teléfono: ${phoneError.message}`);
+      throw new Error(
+        `No se pudo validar duplicados por teléfono: ${phoneError.message}`,
+      );
     }
     phoneMatches = (byPhone ?? []).map((c) => ({
       id: c.id,
@@ -220,7 +250,9 @@ export async function checkDuplicateCustomer(
   }
 
   return {
-    exactMatch: exact ? { id: exact.id, display_name: displayName(exact) } : null,
+    exactMatch: exact
+      ? { id: exact.id, display_name: displayName(exact) }
+      : null,
     phoneMatches,
   };
 }
@@ -304,7 +336,8 @@ export async function createCustomerAction(
     p_contact_indicative: input.contactIndicative || undefined,
     p_contact_phone: input.contactPhone || undefined,
     p_purchase_type: input.purchaseType || undefined,
-    p_customer_type_classification: input.customerTypeClassification || undefined,
+    p_customer_type_classification:
+      input.customerTypeClassification || undefined,
     p_channel: input.channel || undefined,
     p_credit_limit: input.creditLimit ?? undefined,
     p_website_social: input.websiteSocial || undefined,
@@ -320,7 +353,10 @@ export async function createCustomerAction(
         .from("customers")
         .select("id")
         .eq("document_type", input.documentType)
-        .eq("document_number_normalized", input.documentNumber.replace(/\D/g, ""))
+        .eq(
+          "document_number_normalized",
+          input.documentNumber.replace(/\D/g, ""),
+        )
         .maybeSingle();
       return {
         ok: false,
@@ -337,7 +373,6 @@ export async function createCustomerAction(
 
   return { ok: true, customerId: data!.id };
 }
-
 
 // ---------------------------------------------------------------- editar
 
@@ -388,7 +423,8 @@ export async function updateCustomerAction(
     p_contact_indicative: input.contactIndicative || undefined,
     p_contact_phone: input.contactPhone || undefined,
     p_purchase_type: input.purchaseType || undefined,
-    p_customer_type_classification: input.customerTypeClassification || undefined,
+    p_customer_type_classification:
+      input.customerTypeClassification || undefined,
     p_channel: input.channel || undefined,
     p_credit_limit: input.creditLimit ?? undefined,
     p_website_social: input.websiteSocial || undefined,
@@ -407,7 +443,9 @@ export async function claimCustomerAction(
   customerId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("claim_customer", { p_customer_id: customerId });
+  const { error } = await supabase.rpc("claim_customer", {
+    p_customer_id: customerId,
+  });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
