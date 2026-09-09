@@ -4,27 +4,48 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  claimCustomerAction,
   getCustomerForPicker,
   searchCustomers,
   type CustomerSearchResult,
 } from "@/lib/actions/customers";
-import { searchProducts, type ProductSearchResult } from "@/lib/actions/products";
+import {
+  searchProducts,
+  type ProductSearchResult,
+} from "@/lib/actions/products";
 import {
   createOrderAction,
   updateOrderAction,
   type OrderItemInput,
 } from "@/lib/actions/orders";
 import { PageHeader } from "@/components/ui";
-import { SCard, SNumber, SSelect, SStatic, STextarea } from "@/components/siigo-fields";
-import { customerDisplayName, formatMoney, formatNumber } from "@/lib/ui/format";
+import {
+  SCard,
+  SNumber,
+  SSelect,
+  SStatic,
+  STextarea,
+} from "@/components/siigo-fields";
+import {
+  customerDisplayName,
+  formatMoney,
+  formatNumber,
+} from "@/lib/ui/format";
 import { precioDeLista, precioSospechoso } from "@/lib/ui/precios";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
-import { PAYMENT_DETAILS, PRICE_LISTS, SALE_ORIGINS, type PriceList } from "@/lib/ui/fiscal";
+import {
+  PAYMENT_DETAILS,
+  PRICE_LISTS,
+  SALE_ORIGINS,
+  type PriceList,
+} from "@/lib/ui/fiscal";
 
-const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => ({
-  value,
-  label,
-}));
+const PAYMENT_METHODS = Object.entries(PAYMENT_METHOD_LABEL).map(
+  ([value, label]) => ({
+    value,
+    label,
+  }),
+);
 
 // Tasas confirmadas contra el catálogo real de Siigo (doc 06 §14). 10% NO
 // se incluye a propósito: el formulario anterior la ofrecía pero no se
@@ -96,26 +117,63 @@ export function OrderForm({
   const isEdit = mode === "edit";
 
   const [customerQuery, setCustomerQuery] = useState("");
-  const [customerResults, setCustomerResults] = useState<CustomerSearchResult[]>([]);
+  const [customerResults, setCustomerResults] = useState<
+    CustomerSearchResult[]
+  >([]);
   const [customer, setCustomer] = useState<CustomerSearchResult | null>(
     initial?.customer ?? null,
   );
 
   const [productQuery, setProductQuery] = useState("");
-  const [productResults, setProductResults] = useState<ProductSearchResult[]>([]);
-
-  const [lines, setLines] = useState<Line[]>(
-    () => (initial?.lines ?? []).map((l, i) => ({ ...l, key: `${l.productId}-${i}` })),
+  const [productResults, setProductResults] = useState<ProductSearchResult[]>(
+    [],
   );
-  const [channel, setChannel] = useState<"B2B" | "B2C">(initial?.channel ?? "B2B");
-  const [priceList, setPriceList] = useState<PriceList>(initial?.priceList ?? "salon");
-  const [paymentMethod, setPaymentMethod] = useState(initial?.paymentMethod ?? "contado");
-  const [paymentDetail, setPaymentDetail] = useState(initial?.paymentDetail ?? "");
+
+  const [lines, setLines] = useState<Line[]>(() =>
+    (initial?.lines ?? []).map((l, i) => ({
+      ...l,
+      key: `${l.productId}-${i}`,
+    })),
+  );
+  const [channel, setChannel] = useState<"B2B" | "B2C">(
+    initial?.channel ?? "B2B",
+  );
+  const [priceList, setPriceList] = useState<PriceList>(
+    initial?.priceList ?? "salon",
+  );
+  const [paymentMethod, setPaymentMethod] = useState(
+    initial?.paymentMethod ?? "contado",
+  );
+  const [paymentDetail, setPaymentDetail] = useState(
+    initial?.paymentDetail ?? "",
+  );
   const [saleOrigin, setSaleOrigin] = useState(initial?.saleOrigin ?? "");
-  const [retentionPercent, setRetentionPercent] = useState(initial?.retentionPercent ?? 0);
+  const [retentionPercent, setRetentionPercent] = useState(
+    initial?.retentionPercent ?? 0,
+  );
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Los clientes traídos de Siigo llegan sin vendedora responsable a
+  // propósito (nadie los ha atendido todavía aquí), y `create_order` exige
+  // una. Antes eso solo se descubría al pulsar "Crear pedido", con el
+  // formulario entero lleno; ahora se resuelve al elegir el cliente.
+  const sinResponsable = !!customer && !customer.responsible_user_id;
+
+  function hacerseResponsable() {
+    if (!customer) return;
+    setError(null);
+    startTransition(async () => {
+      const r = await claimCustomerAction(customer.id);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      const actualizado = await getCustomerForPicker(customer.id);
+      if (actualizado) setCustomer(actualizado);
+    });
+  }
 
   // Cliente preseleccionado al llegar desde su ficha (?cliente=…). En edición
   // no aplica: el cliente del pedido no se cambia.
@@ -221,7 +279,9 @@ export function OrderForm({
   const units = lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0);
   const isCash = paymentMethod === "contado";
   const availablePaymentMethods =
-    channel === "B2C" ? PAYMENT_METHODS.filter((p) => p.value === "contado") : PAYMENT_METHODS;
+    channel === "B2C"
+      ? PAYMENT_METHODS.filter((p) => p.value === "contado")
+      : PAYMENT_METHODS;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -237,12 +297,14 @@ export function OrderForm({
     }
 
     const common = {
-      items: lines.map(({ productId, quantity, unitPrice, discountPercent }) => ({
-        productId,
-        quantity,
-        unitPrice,
-        discountPercent,
-      })),
+      items: lines.map(
+        ({ productId, quantity, unitPrice, discountPercent }) => ({
+          productId,
+          quantity,
+          unitPrice,
+          discountPercent,
+        }),
+      ),
       paymentMethod,
       retentionPercent: channel === "B2C" ? 0 : retentionPercent,
       notes: notes || undefined,
@@ -298,7 +360,9 @@ export function OrderForm({
                       : "border-line-strong bg-surface text-text-soft"
                   }`}
                 >
-                  {c === "B2B" ? "B2B · Salón o profesional" : "B2C · Consumidor final"}
+                  {c === "B2B"
+                    ? "B2B · Salón o profesional"
+                    : "B2C · Consumidor final"}
                 </button>
               ))}
             </div>
@@ -310,12 +374,15 @@ export function OrderForm({
               label="Lista de precio"
               value={priceList}
               onChange={(v) => applyPriceList(v as PriceList)}
-              options={PRICE_LISTS.map((p) => ({ value: p.value, label: p.label }))}
+              options={PRICE_LISTS.map((p) => ({
+                value: p.value,
+                label: p.label,
+              }))}
             />
             <p className="s-note mt-1">
-              Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Los
-              precios salen del catálogo y no se editan a mano; para bajar un precio, usa el
-              descuento.
+              Cambiarla vuelve a poner el precio de esa lista en los productos
+              ya agregados. Los precios salen del catálogo y no se editan a
+              mano; para bajar un precio, usa el descuento.
             </p>
           </div>
         </SCard>
@@ -323,24 +390,50 @@ export function OrderForm({
         {/* ------------------------------------------------------- cliente */}
         <SCard title="Cliente">
           {customer ? (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-soft px-3 py-3">
-              <div className="min-w-0">
-                <p className="truncate font-medium">{customerDisplayName(customer)}</p>
-                <p className="text-sm text-text-soft">
-                  {customer.document_type} {customer.document_number}
-                  {customer.responsible_name ? ` · ${customer.responsible_name}` : ""}
-                </p>
+            <>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-soft px-3 py-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {customerDisplayName(customer)}
+                  </p>
+                  <p className="text-sm text-text-soft">
+                    {customer.document_type} {customer.document_number}
+                    {customer.responsible_name
+                      ? ` · ${customer.responsible_name}`
+                      : ""}
+                  </p>
+                </div>
+                {!isEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomer(null)}
+                    className="btn btn-tertiary btn-sm"
+                  >
+                    Cambiar
+                  </button>
+                )}
               </div>
-              {!isEdit && (
-                <button
-                  type="button"
-                  onClick={() => setCustomer(null)}
-                  className="btn btn-tertiary btn-sm"
-                >
-                  Cambiar
-                </button>
+
+              {sinResponsable && (
+                <div className="mt-2 rounded-xl border border-warning/40 bg-warning-bg p-3 text-sm">
+                  <p className="font-medium text-[#b54708]">
+                    Este cliente no tiene vendedora responsable
+                  </p>
+                  <p className="mt-1 text-text-soft">
+                    Viene del maestro de Siigo y nadie lo ha atendido todavía en
+                    la app. Un pedido necesita saber de quién es la venta.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={hacerseResponsable}
+                    className="btn btn-primary btn-sm mt-2"
+                  >
+                    {isPending ? "Asignando…" : "Hacerme responsable"}
+                  </button>
+                </div>
               )}
-            </div>
+            </>
           ) : (
             <div className="relative">
               <input
@@ -361,7 +454,9 @@ export function OrderForm({
                       }}
                       className="block w-full px-3 py-3 text-left hover:bg-surface-soft"
                     >
-                      <span className="font-medium">{customerDisplayName(c)}</span>
+                      <span className="font-medium">
+                        {customerDisplayName(c)}
+                      </span>
                       <span className="block text-sm text-text-soft">
                         {c.document_type} {c.document_number}
                       </span>
@@ -401,10 +496,14 @@ export function OrderForm({
                     className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-surface-soft"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-medium">{p.name}</span>
+                      <span className="block truncate font-medium">
+                        {p.name}
+                      </span>
                       <span className="block text-sm text-text-soft">
                         {p.code}
-                        {p.stock_cache !== null ? ` · stock aprox. ${formatNumber(p.stock_cache)}` : ""}
+                        {p.stock_cache !== null
+                          ? ` · stock aprox. ${formatNumber(p.stock_cache)}`
+                          : ""}
                       </span>
                     </span>
                     <span className="font-medium whitespace-nowrap">
@@ -451,7 +550,9 @@ export function OrderForm({
                       <SStatic
                         label="Precio"
                         value={formatMoney(l.unitPrice)}
-                        tone={precioSospechoso(l.unitPrice) ? "danger" : "normal"}
+                        tone={
+                          precioSospechoso(l.unitPrice) ? "danger" : "normal"
+                        }
                       />
                       <SNumber
                         id={`disc-${l.key}`}
@@ -460,7 +561,9 @@ export function OrderForm({
                         max="100"
                         step="0.01"
                         value={l.discountPercent ?? 0}
-                        onChange={(v) => updateLine(l.key, { discountPercent: v })}
+                        onChange={(v) =>
+                          updateLine(l.key, { discountPercent: v })
+                        }
                       />
                     </div>
 
@@ -470,9 +573,10 @@ export function OrderForm({
                         nadie lo note, y se cotizaría de más. */}
                     {precioSospechoso(l.unitPrice) && (
                       <p className="mt-2 text-xs font-semibold text-danger">
-                        ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}. En Siigo este producto
-                        quedó con un precio de relleno en esta lista. Si lo facturas así, sale
-                        una factura electrónica por ese valor y solo se corrige con nota
+                        ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}. En
+                        Siigo este producto quedó con un precio de relleno en
+                        esta lista. Si lo facturas así, sale una factura
+                        electrónica por ese valor y solo se corrige con nota
                         crédito. Consúltalo antes de enviar a bodega.
                       </p>
                     )}
@@ -480,20 +584,26 @@ export function OrderForm({
                     {l.prices[priceList] === null && (
                       <p className="mt-2 text-xs font-medium text-warning">
                         ⚠ Este producto no tiene precio en la lista{" "}
-                        {PRICE_LISTS.find((p) => p.value === priceList)?.label}. El precio de
-                        arriba viene de otra lista — revísalo.
+                        {PRICE_LISTS.find((p) => p.value === priceList)?.label}.
+                        El precio de arriba viene de otra lista — revísalo.
                       </p>
                     )}
 
                     <div className="mt-2 flex items-center justify-between text-sm">
-                      <span className={short ? "font-medium text-danger" : "text-text-soft"}>
+                      <span
+                        className={
+                          short ? "font-medium text-danger" : "text-text-soft"
+                        }
+                      >
                         {l.stock === null
                           ? "Inventario sin datos"
                           : short
                             ? `Solo hay ${l.stock} en inventario`
                             : `Inventario: ${l.stock}`}
                       </span>
-                      <span className="font-semibold">{formatMoney(lineNet(l))}</span>
+                      <span className="font-semibold">
+                        {formatMoney(lineNet(l))}
+                      </span>
                     </div>
                   </li>
                 );
@@ -555,7 +665,13 @@ export function OrderForm({
           </div>
 
           <div className="mt-2">
-            <STextarea id="notes" label="Notas" rows={2} value={notes} onChange={setNotes} />
+            <STextarea
+              id="notes"
+              label="Notas"
+              rows={2}
+              value={notes}
+              onChange={setNotes}
+            />
           </div>
 
           {lines.length > 0 && (
@@ -584,8 +700,16 @@ export function OrderForm({
           </div>
         )}
 
-        <button type="submit" disabled={isPending} className="btn btn-primary hidden md:inline-flex">
-          {isPending ? "Guardando…" : isEdit ? "Guardar cambios" : "Crear pedido"}
+        <button
+          type="submit"
+          disabled={isPending}
+          className="btn btn-primary hidden md:inline-flex"
+        >
+          {isPending
+            ? "Guardando…"
+            : isEdit
+              ? "Guardar cambios"
+              : "Crear pedido"}
         </button>
       </form>
 
@@ -603,7 +727,11 @@ export function OrderForm({
           onClick={handleSubmit}
           className="btn btn-primary w-full"
         >
-          {isPending ? "Guardando…" : isEdit ? "Guardar cambios" : "Crear pedido"}
+          {isPending
+            ? "Guardando…"
+            : isEdit
+              ? "Guardar cambios"
+              : "Crear pedido"}
         </button>
       </div>
     </div>
