@@ -307,6 +307,7 @@ export function NewCustomerForm({
 
     if (!form.documentNumber.trim()) return;
     if (isCompany ? !form.legalName.trim() : !form.firstName.trim() || !form.lastName.trim()) return;
+    if (!esEdicion && !form.email.trim()) return;
 
     if (esEdicion) {
       // Confirmación solo para los antiguos de Siigo. Los creados aquí se
@@ -393,7 +394,13 @@ export function NewCustomerForm({
               id="doc-type"
               label="Tipo de identificación"
               value={form.documentType}
-              onChange={(v) => update("documentType", v)}
+              onChange={(v) => {
+                update("documentType", v);
+                // Mismo criterio del formulario B2B anterior (syncPersonType):
+                // NIT es de empresa, cualquier otro documento es de persona
+                // natural — evita el error de dejar "Persona" con NIT marcado.
+                update("customerType", v === "NIT" ? "juridica" : "natural");
+              }}
               options={DOCUMENT_TYPES}
               disabled={esEdicion}
             />
@@ -608,8 +615,13 @@ export function NewCustomerForm({
                 label="Correo de facturación electrónica"
                 type="email"
                 inputMode="email"
+                required={!esEdicion}
                 value={form.email}
                 onChange={(v) => update("email", v)}
+                // Solo se exige al crear: varios clientes antiguos de Siigo no
+                // tienen correo cargado, y bloquear cualquier edición suya
+                // hasta que alguien lo consiga sería un efecto que nadie pidió.
+                error={!esEdicion ? missing(form.email) : null}
               />
               <SText
                 id="website"
