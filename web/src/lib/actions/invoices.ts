@@ -120,12 +120,17 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
     // hace falta dejar rastro de una llamada que nunca salió.
     const { data: customer } = await supabase
       .from("customers")
-      .select("siigo_customer_id")
+      .select("siigo_customer_id, document_number")
       .eq("id", claimed.customer_id)
       .maybeSingle();
     if (!customer?.siigo_customer_id) {
       throw new InvoiceValidationError(
         "El cliente no está sincronizado con Siigo — sincronízalo desde su ficha primero.",
+      );
+    }
+    if (!customer.document_number) {
+      throw new InvoiceValidationError(
+        "El cliente no tiene número de documento — no se puede facturar sin él.",
       );
     }
 
@@ -216,7 +221,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       orderNumber: claimed.order_number as string,
       grandTotal: Number(claimed.grand_total),
       retentionPercent: Number(claimed.retention_percent),
-      siigoCustomerId: customer.siigo_customer_id,
+      customerIdentification: customer.document_number,
       costCenter,
       documentTypeId: integraciones.invoiceDocumentId,
       paymentTypeId,

@@ -105,7 +105,14 @@ export type SiigoInvoicePayment = {
 export type SiigoInvoiceCreatePayload = {
   document: { id: number };
   date: string; // YYYY-MM-DD
-  customer: { id: string };
+  // Confirmado contra la API real (2026-09-10): al crear una factura, Siigo
+  // referencia al cliente por su documento (`identification`), no por el id
+  // interno de Siigo. Mandar `{ id: ... }` (que sí es lo correcto para el
+  // endpoint de terceros) rechaza con "parameter_required: el campo
+  // customer.identification es obligatorio". La respuesta al LEER una
+  // factura sí trae ambos (ver SiigoInvoice más abajo) — la misma clase de
+  // asimetría lectura/escritura que id_type en customers.
+  customer: { identification: string };
   cost_center?: number;
   seller?: number;
   observations?: string;
