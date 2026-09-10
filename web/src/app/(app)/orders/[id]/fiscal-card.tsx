@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiigoSyncButton } from "@/app/(app)/customers/[id]/siigo-sync-button";
 
 // doc 11 §64/§65: bodega debe poder verificar los datos fiscales del cliente
 // sin salir del pedido, con un indicador claro de qué está completo y qué hay
@@ -84,6 +85,14 @@ export function FiscalCard({ customer }: { customer: FiscalCustomer }) {
             )}
           </dd>
         </div>
+        {!customer.siigo_customer_id && (
+          // Bodega/supervisor ya verifican los datos fiscales en el checklist
+          // de aprobación — sincronizar aquí mismo evita que tengan que ir a
+          // la ficha del cliente solo para esto antes de poder facturar.
+          <div className="flex items-center justify-end py-2">
+            <SiigoSyncButton customerId={customer.id} />
+          </div>
+        )}
       </dl>
 
       <Link

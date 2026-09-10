@@ -64,8 +64,11 @@ export type CustomerSyncResult =
 // conflicto — no crear nada, un humano decide.
 export async function syncCustomerToSiigoAction(customerId: string): Promise<CustomerSyncResult> {
   const profile = await getCurrentProfile();
-  if (!profile || profile.role !== "ADMIN") {
-    return { ok: false, error: "Solo un administrador puede sincronizar con Siigo (doc 05 §5)" };
+  if (!profile || !["WAREHOUSE", "SUPERVISOR", "ADMIN"].includes(profile.role)) {
+    return {
+      ok: false,
+      error: "Solo bodega, supervisor o administrador puede sincronizar con Siigo (doc 05 §5)",
+    };
   }
 
   // El corte de emergencia se comprueba en el servidor, no escondiendo el
