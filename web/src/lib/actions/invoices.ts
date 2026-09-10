@@ -225,10 +225,21 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       );
     }
 
+    // El documento de pruebas (comprobante de ingreso, SIIGO_DOC_TEST) tiene
+    // reteiva/reteica desactivados en la configuración real de la cuenta
+    // (confirmado contra /v1/document-types: reteiva:false, reteica:false),
+    // a diferencia del documento electrónico real. No es un problema del ID
+    // de retención — ese documento no puede llevar retención de ningún tipo,
+    // y Siigo lo rechaza con "invalid_array" en retentions[0].id sin importar
+    // cuál se mande. Se omite aquí en vez de dejar que Siigo lo rechace.
+    const retentionPercentForSiigo = integraciones.isTestDocument
+      ? 0
+      : Number(claimed.retention_percent);
+
     const payload = buildSiigoInvoicePayload({
       orderNumber: claimed.order_number as string,
       grandTotal: Number(claimed.grand_total),
-      retentionPercent: Number(claimed.retention_percent),
+      retentionPercent: retentionPercentForSiigo,
       customerIdentification: customer.document_number,
       costCenter,
       documentTypeId: integraciones.invoiceDocumentId,
