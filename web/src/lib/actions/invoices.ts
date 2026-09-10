@@ -148,6 +148,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       "siigo_payment_types",
       "siigo_tax_ids",
       "siigo_seller_map",
+      "siigo_default_seller_id",
       ...INTEGRATION_KEYS,
     ]);
     const integraciones = parseIntegrationSettings(settings);
@@ -155,6 +156,13 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
     const paymentTypes = (settings.get("siigo_payment_types") as Record<string, number> | undefined) ?? {};
     const taxIds = (settings.get("siigo_tax_ids") as Record<string, number> | undefined) ?? {};
     const sellerMap = (settings.get("siigo_seller_map") as Record<string, number> | undefined) ?? {};
+    // Siigo exige `seller` siempre, aunque nuestro tipo lo marcaba opcional
+    // (confirmado contra la cuenta real: "The field seller is required").
+    // `siigo_seller_map` solo tiene a las vendedoras reales — un admin
+    // haciendo un pedido de prueba, o cualquier usuario todavía sin mapear,
+    // no aparece ahí. Sin este respaldo, facturar ese pedido fallaría
+    // siempre, sin ninguna forma de resolverlo desde la pantalla.
+    const defaultSellerId = settings.get("siigo_default_seller_id") as number | undefined;
 
     // Siigo no separa "a cuántos días se paga" de "por dónde entró la plata":
     // sus tipos de pago SON el medio (Efectivo, Bancolombia, Bold) más un
@@ -226,7 +234,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       documentTypeId: integraciones.invoiceDocumentId,
       paymentTypeId,
       creditDays: creditDays > 0 ? creditDays : undefined,
-      sellerSiigoId: sellerMap[claimed.seller_id as string],
+      sellerSiigoId: sellerMap[claimed.seller_id as string] ?? defaultSellerId,
       items: itemInputs,
     });
 
