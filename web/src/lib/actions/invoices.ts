@@ -136,7 +136,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
 
     const { data: items } = await supabase
       .from("order_items")
-      .select("product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_value, tax_percent, siigo_product_id")
+      .select("product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_percent, tax_percent, siigo_product_id")
       .eq("order_id", orderId);
 
     if (!items || items.length === 0) {
@@ -209,7 +209,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
         name: item.product_name_snapshot,
         quantity: Number(item.quantity),
         unitPrice: Number(item.unit_price),
-        discountValue: Number(item.discount_value),
+        discountPercent: Number(item.discount_percent),
         siigoTaxId: taxId,
       });
     }

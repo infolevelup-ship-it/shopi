@@ -355,7 +355,12 @@ export type SiigoInvoiceOrderItemInput = {
   name: string;
   quantity: number;
   unitPrice: number;
-  discountValue: number;
+  // Confirmado contra la API real (2026-09-10, pedido WOW-P-0000048): el
+  // campo `discount` de un ítem de factura en Siigo es un PORCENTAJE, no un
+  // valor en pesos — mandar el valor (p.ej. 1.40 pesos de descuento en una
+  // línea de 7000) hace que Siigo lo lea como 1.40% y calcule un total
+  // distinto al nuestro, rechazando la factura con "invalid_total_payments".
+  discountPercent: number;
   siigoTaxId: number | null; // null = sin IVA en esta línea, se omite `taxes`
 };
 
@@ -399,7 +404,7 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
       description: item.name,
       quantity: item.quantity,
       price: item.unitPrice,
-      discount: item.discountValue || undefined,
+      discount: item.discountPercent || undefined,
       taxes: item.siigoTaxId ? [{ id: item.siigoTaxId }] : undefined,
     })),
     payments: [
