@@ -54,6 +54,7 @@ export type SiigoCustomer = {
   check_digit?: string;
   name: string[];
   commercial_name?: string;
+  branch_office?: number;
   active?: boolean;
   vat_responsible?: boolean;
   fiscal_responsibilities?: SiigoFiscalResponsibility[];
@@ -136,7 +137,14 @@ export type SiigoCustomerUpdatePayload = SiigoCustomerCreatePayload;
 
 export type SiigoCustomerCreatePayload = {
   person_type: "Person" | "Company";
-  id_type: { code: string };
+  // Asimetría confirmada contra la API real (2026-09-10): al LEER, Siigo
+  // devuelve id_type como objeto ({"code":"13","name":"Cédula..."}) — por
+  // eso SiigoCustomer más abajo lo tipa como objeto. Pero al ESCRIBIR
+  // (POST/PUT) exige el código como string plano ("13"); mandarlo como
+  // objeto da "parameter_required: The field id_type is required" aunque el
+  // campo sí vaya en el cuerpo. Costó una sesión con acceso real a Siigo
+  // encontrarlo, porque el mensaje de error no menciona el formato.
+  id_type: string;
   identification: string;
   check_digit?: string;
   name: string[];

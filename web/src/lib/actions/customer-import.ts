@@ -46,6 +46,12 @@ function filaDesdeSiigo(c: SiigoCustomer) {
 
   return {
     siigo_customer_id: String(c.id),
+    // Confirmado contra la API real (2026-09-10): actualizar un tercero con
+    // una sucursal distinta a la real puede rechazarse entero. Se guarda
+    // desde la importación para que un cliente traído de Siigo ya llegue
+    // listo para editarse, sin depender de que antes alguien lo sincronice
+    // a mano.
+    siigo_branch_office: c.branch_office ?? null,
     customer_type: esEmpresa ? "juridica" : "natural",
     document_type: documentType,
     document_number: String(c.identification),

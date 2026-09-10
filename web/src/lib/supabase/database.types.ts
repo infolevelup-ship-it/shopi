@@ -488,6 +488,7 @@ export type Database = {
           purchase_type: string | null
           responsible_user_id: string | null
           secondary_phone: string | null
+          siigo_branch_office: number | null
           siigo_customer_id: string | null
           source: string | null
           state_code: string | null
@@ -542,6 +543,7 @@ export type Database = {
           purchase_type?: string | null
           responsible_user_id?: string | null
           secondary_phone?: string | null
+          siigo_branch_office?: number | null
           siigo_customer_id?: string | null
           source?: string | null
           state_code?: string | null
@@ -596,6 +598,7 @@ export type Database = {
           purchase_type?: string | null
           responsible_user_id?: string | null
           secondary_phone?: string | null
+          siigo_branch_office?: number | null
           siigo_customer_id?: string | null
           source?: string | null
           state_code?: string | null
@@ -2167,6 +2170,7 @@ export type Database = {
           purchase_type: string | null
           responsible_user_id: string | null
           secondary_phone: string | null
+          siigo_branch_office: number | null
           siigo_customer_id: string | null
           source: string | null
           state_code: string | null
@@ -2376,6 +2380,7 @@ export type Database = {
           purchase_type: string | null
           responsible_user_id: string | null
           secondary_phone: string | null
+          siigo_branch_office: number | null
           siigo_customer_id: string | null
           source: string | null
           state_code: string | null
@@ -3025,6 +3030,7 @@ export type Database = {
           purchase_type: string | null
           responsible_user_id: string | null
           secondary_phone: string | null
+          siigo_branch_office: number | null
           siigo_customer_id: string | null
           source: string | null
           state_code: string | null

@@ -25,6 +25,20 @@ import {
 function detalleSiigoError(err: unknown): { message: string; httpStatus: number | null } {
   if (err instanceof SiigoApiError) {
     const cuerpo = err.body?.trim();
+    // Confirmado contra la cuenta real (2026-09-10): el "Consumidor Final"
+    // genérico (y probablemente cualquier tercero equivalente que Siigo trate
+    // como registro del sistema) rechaza cualquier PUT con este código, sin
+    // importar qué se le cambie — no es un dato del payload lo que falla,
+    // es que Siigo protege ese tercero de edición por API a propósito.
+    if (cuerpo && /non_editable/i.test(cuerpo)) {
+      return {
+        message:
+          "Siigo no permite editar este tercero por la API — es un registro protegido " +
+          '(por ejemplo, el "Consumidor Final" genérico). Para cambiarle datos hay que ' +
+          "hacerlo manualmente desde la interfaz de Siigo.",
+        httpStatus: err.status,
+      };
+    }
     return {
       message: cuerpo ? `${err.message}: ${cuerpo.slice(0, 500)}` : err.message,
       httpStatus: err.status,
@@ -68,7 +82,7 @@ export async function syncCustomerToSiigoAction(customerId: string): Promise<Cus
   const { data: customer } = await supabase
     .from("customers")
     .select(
-      "id, customer_type, document_type, document_number, document_number_normalized, check_digit, legal_name, first_name, last_name, commercial_name, phone, address, state_code, city_code, fiscal_responsibility, fiscal_responsibilities, vat_responsible, siigo_customer_id",
+      "id, customer_type, document_type, document_number, document_number_normalized, check_digit, legal_name, first_name, last_name, commercial_name, phone, address, state_code, city_code, fiscal_responsibility, fiscal_responsibilities, vat_responsible, siigo_customer_id, siigo_branch_office",
     )
     .eq("id", customerId)
     .maybeSingle();
@@ -100,19 +114,29 @@ export async function syncCustomerToSiigoAction(customerId: string): Promise<Cus
     }
 
     let siigoId: string;
+    let branchOffice: number;
     let outcome: "matched" | "created";
 
     if (matches.length === 1) {
       siigoId = matches[0].id;
+      // Un tercero que ya existía en Siigo trae su sucursal real; si Siigo
+      // no la informa (el campo es opcional en su respuesta) se asume 0 y no
+      // null, porque null significaría "nunca se ha confirmado" y aquí sí se
+      // acaba de confirmar.
+      branchOffice = matches[0].branch_office ?? 0;
       outcome = "matched";
     } else {
       const payload = buildSiigoCustomerPayload(customer);
       const created = await createSiigoCustomer(payload);
       siigoId = created.id;
+      branchOffice = created.branch_office ?? 0;
       outcome = "created";
     }
 
-    await serviceClient.from("customers").update({ siigo_customer_id: siigoId }).eq("id", customer.id);
+    await serviceClient
+      .from("customers")
+      .update({ siigo_customer_id: siigoId, siigo_branch_office: branchOffice })
+      .eq("id", customer.id);
     await serviceClient.from("integration_logs").insert({
       system: "SIIGO",
       operation: outcome === "created" ? "CUSTOMER_CREATE" : "CUSTOMER_LOOKUP",
@@ -264,7 +288,7 @@ export async function pushCustomerUpdateToSiigoAction(
   const { data: customer } = await supabase
     .from("customers")
     .select(
-      "id, customer_type, document_type, document_number, document_number_normalized, check_digit, legal_name, first_name, last_name, commercial_name, phone, address, state_code, city_code, fiscal_responsibility, fiscal_responsibilities, vat_responsible, siigo_customer_id",
+      "id, customer_type, document_type, document_number, document_number_normalized, check_digit, legal_name, first_name, last_name, commercial_name, phone, address, state_code, city_code, fiscal_responsibility, fiscal_responsibilities, vat_responsible, siigo_customer_id, siigo_branch_office",
     )
     .eq("id", customerId)
     .maybeSingle();

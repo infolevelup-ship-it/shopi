@@ -241,6 +241,16 @@ export type WowCustomerForSiigo = {
   /** Siigo acepta varias; `fiscal_responsibility` es solo la primera. */
   fiscal_responsibilities: string[] | null;
   vat_responsible: boolean | null;
+  /**
+   * La sucursal del tercero en Siigo. WOW nunca la había guardado — se
+   * mandaba siempre 0 al actualizar, sin importar cuál fuera la real. Para
+   * un tercero cuya sucursal real no es 0, eso equivale a pedirle a Siigo
+   * que la cambie, y Siigo puede tratarla como parte del identificador y
+   * rechazar la escritura entera. Con el valor real (guardado al leer el
+   * tercero de Siigo) se manda tal cual; solo se usa 0 para uno que nunca
+   * ha existido allá.
+   */
+  siigo_branch_office: number | null;
 };
 
 // Construye el payload de creación a partir de la fila de `customers` en
@@ -259,10 +269,14 @@ export function buildSiigoCustomerPayload(customer: WowCustomerForSiigo): SiigoC
 
   const payload: SiigoCustomerCreatePayload = {
     person_type: isCompany ? "Company" : "Person",
-    id_type: { code: idType },
+    // string plano al escribir, aunque Siigo lo devuelva como objeto al leer
+    // (ver el comentario en SiigoCustomerCreatePayload) — confirmado contra
+    // la API real: en objeto siempre rechaza con "el campo id_type es
+    // obligatorio", aunque sí vaya en el cuerpo.
+    id_type: idType,
     identification: customer.document_number,
     name,
-    branch_office: 0,
+    branch_office: customer.siigo_branch_office ?? 0,
   };
 
   if (customer.check_digit) payload.check_digit = customer.check_digit;
