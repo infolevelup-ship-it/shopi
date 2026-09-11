@@ -9,6 +9,7 @@ import { InvoicePanel } from "./invoice-panel";
 import { GhlSyncStatus } from "./ghl-sync-status";
 import { FiscalCard } from "./fiscal-card";
 import { ReceiptsPanel } from "./receipts-panel";
+import { PaymentMethodEditor } from "./payment-method-editor";
 import { Callout, PageHeader, StatusBadge } from "@/components/ui";
 import {
   customerDisplayName,
@@ -412,20 +413,30 @@ export default async function OrderDetailPage({
           {/* Condiciones con las que se armó el pedido: bodega las necesita
               para cuadrar el recibo, y facturación para emitir bien. */}
           <dl className="mt-3 grid gap-1 border-t border-line pt-3 text-sm sm:grid-cols-2">
-            {order.payment_method && (
-              <Condition
-                label="Forma de pago"
-                value={
-                  PAYMENT_METHOD_LABEL[order.payment_method] ??
-                  order.payment_method
-                }
+            {isReviewer && !["INVOICING", "INVOICED", "CANCELLED"].includes(order.status) ? (
+              <PaymentMethodEditor
+                orderId={order.id}
+                paymentMethod={order.payment_method}
+                paymentMethodDetail={order.payment_method_detail}
               />
-            )}
-            {order.payment_method_detail && (
-              <Condition
-                label="Medio de pago"
-                value={labelOf(PAYMENT_DETAILS, order.payment_method_detail)}
-              />
+            ) : (
+              <>
+                {order.payment_method && (
+                  <Condition
+                    label="Forma de pago"
+                    value={
+                      PAYMENT_METHOD_LABEL[order.payment_method] ??
+                      order.payment_method
+                    }
+                  />
+                )}
+                {order.payment_method_detail && (
+                  <Condition
+                    label="Medio de pago"
+                    value={labelOf(PAYMENT_DETAILS, order.payment_method_detail)}
+                  />
+                )}
+              </>
             )}
             {order.price_list && (
               <Condition

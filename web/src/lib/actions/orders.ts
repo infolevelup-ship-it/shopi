@@ -225,6 +225,23 @@ export async function startOrderReviewAction(orderId: string): Promise<OrderActi
   return { ok: true };
 }
 
+// Bodega corrige forma/medio de pago al ver el comprobante real, sin reabrir
+// cantidades ni precios (eso sigue siendo solo de update_order).
+export async function correctOrderPaymentMethodAction(
+  orderId: string,
+  paymentMethod: string,
+  paymentMethodDetail?: string,
+): Promise<OrderActionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("correct_order_payment_method", {
+    p_order_id: orderId,
+    p_payment_method: paymentMethod,
+    p_payment_method_detail: paymentMethodDetail || undefined,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function approveOrderAction(
   orderId: string,
   checklist: ChecklistState,

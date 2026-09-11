@@ -70,14 +70,19 @@ export const PRICE_LISTS = [
 export type PriceList = (typeof PRICE_LISTS)[number]["value"];
 
 // Por dónde entró la plata. Solo tiene sentido para pagos de contado; a
-// crédito todavía no ha entrado nada.
+// crédito todavía no ha entrado nada. Mismos canales reales del formulario
+// B2B anterior (select #medioPago) — la lista genérica que había aquí
+// (transferencia/datáfono/nequi/daviplata/otro) no correspondía a ningún
+// canal real de la cuenta, así que facturar no podía mapearla a un id de
+// Siigo (app_settings.siigo_payment_types).
 export const PAYMENT_DETAILS: Option[] = [
   { value: "efectivo", label: "Efectivo" },
-  { value: "transferencia", label: "Transferencia bancaria" },
-  { value: "datafono", label: "Datáfono" },
-  { value: "nequi", label: "Nequi" },
-  { value: "daviplata", label: "Daviplata" },
-  { value: "otro", label: "Otro" },
+  { value: "addi", label: "ADDI" },
+  { value: "bancolombia", label: "Bancolombia" },
+  { value: "banco_davivienda", label: "Banco Davivienda" },
+  { value: "davivienda_ahorros", label: "Davivienda Ahorros" },
+  { value: "bold", label: "Bold" },
+  { value: "recaudo_coordinadora", label: "Recaudo Coordinadora" },
 ];
 
 // De dónde salió la venta. Es solo para reportes: nunca afecta la factura.
