@@ -5,6 +5,8 @@ import { getCurrentProfile } from "@/lib/auth";
 import { SiigoSyncButton } from "./siigo-sync-button";
 import { GhlSyncStatus } from "./ghl-sync-status";
 import { FollowUpsPanel } from "./followups-panel";
+import { DocumentsPanel } from "./documents-panel";
+import { listCustomerDocuments } from "@/lib/actions/customer-documents";
 import { ClaimCustomerButton } from "./claim-button";
 import { Callout, PageHeader, StatTile, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatDate, formatDateTime, formatMoney } from "@/lib/ui/format";
@@ -75,6 +77,7 @@ export default async function CustomerDetailPage({
     { data: pendingFollowUps },
     { data: orders },
     { data: quotes },
+    documents,
   ] = await Promise.all([
     supabase
       .from("customer_activities")
@@ -107,6 +110,7 @@ export default async function CustomerDetailPage({
       .eq("customer_id", id)
       .order("created_at", { ascending: false })
       .limit(10),
+    listCustomerDocuments(id),
   ]);
 
   const responsible = Array.isArray(customer.responsible)
@@ -378,6 +382,14 @@ export default async function CustomerDetailPage({
           />
         </div>
       )}
+
+      <div className="mt-5">
+        <DocumentsPanel
+          customerId={customer.id}
+          documents={documents}
+          canDelete={profile?.role === "SUPERVISOR" || profile?.role === "ADMIN"}
+        />
+      </div>
 
       {/* --------------------------------------------------- historial */}
       <div className="mt-5 grid gap-5 lg:grid-cols-2">

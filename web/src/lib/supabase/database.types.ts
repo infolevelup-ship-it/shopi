@@ -53,6 +53,7 @@ export type Database = {
           entity_id: string
           entity_type: string
           id: string
+          label: string | null
           mime_type: string | null
           original_filename: string | null
           size_bytes: number | null
@@ -65,6 +66,7 @@ export type Database = {
           entity_id: string
           entity_type: string
           id?: string
+          label?: string | null
           mime_type?: string | null
           original_filename?: string | null
           size_bytes?: number | null
@@ -77,6 +79,7 @@ export type Database = {
           entity_id?: string
           entity_type?: string
           id?: string
+          label?: string | null
           mime_type?: string | null
           original_filename?: string | null
           size_bytes?: number | null
@@ -2606,6 +2609,11 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       current_wow_user_id: { Args: never; Returns: string }
+      customer_document_path_id: { Args: { p_name: string }; Returns: string }
+      delete_customer_document: {
+        Args: { p_attachment_id: string }
+        Returns: string
+      }
       delete_order: {
         Args: { p_order_id: string; p_reason?: string }
         Returns: string
@@ -2715,6 +2723,35 @@ export type Database = {
       next_order_number: { Args: never; Returns: string }
       next_quote_number: { Args: never; Returns: string }
       receipt_path_order_id: { Args: { p_name: string }; Returns: string }
+      register_customer_document: {
+        Args: {
+          p_customer_id: string
+          p_label?: string
+          p_mime_type?: string
+          p_original_filename?: string
+          p_size_bytes?: number
+          p_storage_path: string
+        }
+        Returns: {
+          checksum: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          label: string | null
+          mime_type: string | null
+          original_filename: string | null
+          size_bytes: number | null
+          storage_path: string
+          uploaded_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attachments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       register_order_receipt: {
         Args: {
           p_checksum?: string
@@ -2730,6 +2767,7 @@ export type Database = {
           entity_id: string
           entity_type: string
           id: string
+          label: string | null
           mime_type: string | null
           original_filename: string | null
           size_bytes: number | null
