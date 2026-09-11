@@ -56,8 +56,18 @@ function normalizar(texto: string) {
     .trim();
 }
 
-function precios(p: SiigoProduct) {
+// Confirmado contra la cuenta real (producto PW101101, `tax_included: true`,
+// precio 7000): Siigo puede guardar el valor de cada lista CON el IVA ya
+// sumado. `products.price_*` tiene que quedar siempre en precio BASE (sin
+// IVA) — create_order/update_order/buildSiigoInvoicePayload le suman el IVA
+// encima al facturar, así que si aquí ya viene con IVA, se está cobrando dos
+// veces. Mismo bug que ya se había encontrado y corregido en el formulario
+// HTML anterior (docs/PLAN_V2_Formulario_Retencion_Consecutivo.md §0.1).
+function precios(p: SiigoProduct, taxPercent: number | null) {
   const listas = p.prices?.[0]?.price_list ?? [];
+  const factor = p.tax_included && taxPercent ? 1 + taxPercent / 100 : 1;
+  const sinIva = (valor: number) => Math.round((valor / factor) * 100) / 100;
+
   const encontrado: Record<ClaveLista, number | null> = {
     publico: null,
     profesional: null,
@@ -71,14 +81,14 @@ function precios(p: SiigoProduct) {
       return PISTAS_LISTA[clave].some((pista) => nombre.includes(pista));
     });
     const lista = exacta ?? aproximada;
-    if (lista?.value != null) encontrado[clave] = Number(lista.value);
+    if (lista?.value != null) encontrado[clave] = sinIva(Number(lista.value));
   }
 
   // Si no se reconoció ninguna, se usa la primera como precio público: es
   // mejor tener un precio de partida que dejar el producto en blanco.
   if (CLAVES.every((c) => encontrado[c] == null)) {
     const primera = listas.find((l) => l.value != null);
-    if (primera?.value != null) encontrado.publico = Number(primera.value);
+    if (primera?.value != null) encontrado.publico = sinIva(Number(primera.value));
   }
 
   return {
@@ -185,7 +195,11 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
   let sinPrecio = 0;
   let conListaIncompleta = 0;
   const filas = utilizables.map((p) => {
-    const { price_public, price_professional, price_salon, nombres, faltantes } = precios(p);
+    const impuesto = iva(p);
+    const { price_public, price_professional, price_salon, nombres, faltantes } = precios(
+      p,
+      impuesto.tax_percent,
+    );
     nombres.forEach((n) => listasVistas.add(n));
     // Que a un producto le falte una lista NO es un fallo de la sincronización:
     // es que en Siigo ese producto no tiene ese precio cargado. Se cuentan por
@@ -204,7 +218,7 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
       code: p.code,
       name: p.name,
       active: p.active ?? true,
-      ...iva(p),
+      ...impuesto,
       unit_code: p.unit?.code ?? p.unit_label ?? null,
       price_public,
       price_professional,

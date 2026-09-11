@@ -24,6 +24,8 @@ export type SiigoProduct = {
   code: string;
   name: string;
   active?: boolean;
+  /** Confirmado contra la cuenta real: cuando es true, `prices[].price_list[].value` YA trae el IVA sumado. */
+  tax_included?: boolean;
   available_quantity?: number;
   warehouses?: SiigoWarehouseStock[];
   taxes?: { id: number; name: string; type: string; percentage: number }[];
