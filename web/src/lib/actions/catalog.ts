@@ -2,6 +2,7 @@
 
 import { getCurrentProfile } from "@/lib/auth";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { listAllSiigoProducts, SiigoApiError } from "@/lib/siigo/client";
 import type { SiigoProduct } from "@/lib/siigo/types";
 import { getIntegrationSettings } from "@/lib/actions/integrations";
@@ -153,25 +154,18 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
   // sincronización de stock.
   const serviceClient = createServiceRoleClient();
 
-  // PostgREST corta cualquier select en 1000 filas si no se pide un rango
-  // explícito — sin error, sin aviso, con las mismas 200 OK de siempre. Con
-  // 1761 productos eso dejaba ~760 afuera de este mapa: el código los daba
-  // por nuevos y les generaba un id random, y el upsert por código encontraba
-  // la fila real (que sí existía) e intentaba pisarle el id — ahí es donde
-  // reventaba contra las foreign keys de pedidos/cotizaciones. Por eso el
-  // error salía siempre con el mismo mensaje: no era un dato inconsistente en
-  // Siigo, era este `select` trayendo solo una parte de la tabla.
-  const existentes: { id: string; code: string; siigo_product_id: string | null }[] = [];
-  for (let desde = 0; ; desde += 1000) {
-    const { data, error } = await serviceClient
-      .from("products")
-      .select("id, code, siigo_product_id")
-      .range(desde, desde + 999);
-    if (error) {
-      return { ok: false, error: `No se pudo leer el catálogo actual: ${error.message}` };
-    }
-    existentes.push(...(data ?? []));
-    if (!data || data.length < 1000) break;
+  // Ver fetch-all-rows.ts: un select sin rango se corta en 1000 filas sin
+  // avisar, y con 1761 productos eso dejaba ~760 fuera de este mapa —
+  // tratados como nuevos, con un id random que chocaba contra el id real
+  // (referenciado por pedidos/cotizaciones) al hacer el upsert por código.
+  let existentes: { id: string; code: string; siigo_product_id: string | null }[];
+  try {
+    existentes = await fetchAllRows(async (desde, hasta) =>
+      serviceClient.from("products").select("id, code, siigo_product_id").range(desde, hasta),
+    );
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : "error desconocido";
+    return { ok: false, error: `No se pudo leer el catálogo actual: ${mensaje}` };
   }
   const idPorCodigo = new Map(existentes.map((p) => [p.code, p.id]));
   // `siigo_product_id` también es único. Si en Siigo le cambian el código a un
