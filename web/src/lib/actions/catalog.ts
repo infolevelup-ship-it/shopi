@@ -153,16 +153,33 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
   // sincronización de stock.
   const serviceClient = createServiceRoleClient();
 
-  const { data: existentes } = await serviceClient
-    .from("products")
-    .select("id, code, siigo_product_id");
-  const idPorCodigo = new Map((existentes ?? []).map((p) => [p.code as string, p.id as string]));
+  // PostgREST corta cualquier select en 1000 filas si no se pide un rango
+  // explícito — sin error, sin aviso, con las mismas 200 OK de siempre. Con
+  // 1761 productos eso dejaba ~760 afuera de este mapa: el código los daba
+  // por nuevos y les generaba un id random, y el upsert por código encontraba
+  // la fila real (que sí existía) e intentaba pisarle el id — ahí es donde
+  // reventaba contra las foreign keys de pedidos/cotizaciones. Por eso el
+  // error salía siempre con el mismo mensaje: no era un dato inconsistente en
+  // Siigo, era este `select` trayendo solo una parte de la tabla.
+  const existentes: { id: string; code: string; siigo_product_id: string | null }[] = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await serviceClient
+      .from("products")
+      .select("id, code, siigo_product_id")
+      .range(desde, desde + 999);
+    if (error) {
+      return { ok: false, error: `No se pudo leer el catálogo actual: ${error.message}` };
+    }
+    existentes.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const idPorCodigo = new Map(existentes.map((p) => [p.code, p.id]));
   // `siigo_product_id` también es único. Si en Siigo le cambian el código a un
   // producto, buscarlo solo por código lo daría por nuevo y el insert chocaría
   // contra products_siigo_id_uniq, tumbando el lote completo. El id de Siigo
   // es el que no cambia, así que manda.
   const idPorSiigo = new Map(
-    (existentes ?? []).map((p) => [p.siigo_product_id as string, p.id as string]),
+    existentes.filter((p) => p.siigo_product_id).map((p) => [p.siigo_product_id as string, p.id]),
   );
 
   // El upsert es atómico: un solo producto inservible tumba los cien. Y Postgres
