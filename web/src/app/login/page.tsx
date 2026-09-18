@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -63,6 +64,12 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="input"
           />
+          <Link
+            href="/olvide-password"
+            className="mt-1 inline-block text-sm text-text-soft underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
         </div>
 
         {error && (
