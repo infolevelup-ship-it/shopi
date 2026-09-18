@@ -43,7 +43,7 @@ export default async function EditOrderPage({
   const { data: items } = await supabase
     .from("order_items")
     .select(
-      "product_id, product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_percent",
+      "product_id, product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_percent, price_list",
     )
     .eq("order_id", id)
     .order("created_at", { ascending: true });
@@ -60,6 +60,11 @@ export default async function EditOrderPage({
     .filter((i) => i.product_id)
     .map((i) => {
       const p = byId.get(i.product_id!);
+      // Cada línea guarda su propia lista desde que se creó. Las que vienen
+      // de antes de este cambio no la tienen guardada: se usa la del pedido
+      // completo como venía funcionando, y si tampoco hay, "salon" por ser
+      // el valor con el que arranca un pedido nuevo.
+      const lineaPriceList = ((i.price_list ?? order.price_list ?? "salon") as PriceList);
       return {
         productId: i.product_id!,
         name: i.product_name_snapshot ?? p?.name ?? "",
@@ -70,13 +75,14 @@ export default async function EditOrderPage({
           profesional: p?.price_professional ?? null,
           salon: p?.price_salon ?? null,
         },
+        priceList: lineaPriceList,
         quantity: Number(i.quantity),
         // El precio guardado puede ser de antes de que mandara el catálogo, o
         // el producto pudo cambiar de precio. Al guardar, el servidor usa el
         // del catálogo: si aquí se mostrara el viejo, la vendedora vería un
         // total y se guardaría otro.
         unitPrice: p
-          ? (precioDeLista(p, order.price_list) ?? Number(i.unit_price))
+          ? (precioDeLista(p, lineaPriceList) ?? Number(i.unit_price))
           : Number(i.unit_price),
         discountPercent: Number(i.discount_percent ?? 0),
       };

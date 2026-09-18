@@ -98,7 +98,7 @@ export async function getReportsData(range: ReportRange): Promise<ReportsData | 
   if (isSeller || isSupervisorOrAdmin) {
     let invoicedQuery = supabase
       .from("orders")
-      .select("id, grand_total, seller_id, customer_id, price_list, seller:users!orders_seller_id_fkey(name), customer:customers(commercial_name, legal_name, first_name, last_name)")
+      .select("id, grand_total, seller_id, customer_id, seller:users!orders_seller_id_fkey(name), customer:customers(commercial_name, legal_name, first_name, last_name)")
       .eq("status", "INVOICED")
       .gte("invoiced_at", startIso);
     if (isSeller) invoicedQuery = invoicedQuery.eq("seller_id", profile.id);
@@ -132,22 +132,19 @@ export async function getReportsData(range: ReportRange): Promise<ReportsData | 
       // sin depender de sintaxis de embeds que no se ha probado.
       const invoicedOrderIds = (invoicedOrders ?? []).map((o) => o.id);
       const productTotals = new Map<string, number>();
-      // La lista de precio vive en `orders`, no en cada línea (se elige una
-      // vez por pedido — order-form.tsx): para sumar cantidades por lista hay
-      // que mirar de qué pedido viene cada línea.
-      const priceListPorPedido = new Map(
-        (invoicedOrders ?? []).map((o) => [o.id, o.price_list ?? "(sin lista)"]),
-      );
+      // Cada línea guarda su propia lista de precio (un mismo pedido puede
+      // mezclar Salón y Profesional entre productos distintos), así que la
+      // agregación es directa sobre `order_items`, sin pasar por `orders`.
       const priceListTotals = new Map<string, { total: number; quantity: number }>();
       if (invoicedOrderIds.length > 0) {
         const { data: items } = await supabase
           .from("order_items")
-          .select("order_id, product_name_snapshot, quantity, line_total")
+          .select("product_name_snapshot, quantity, line_total, price_list")
           .in("order_id", invoicedOrderIds);
         for (const i of items ?? []) {
           productTotals.set(i.product_name_snapshot, (productTotals.get(i.product_name_snapshot) ?? 0) + Number(i.line_total));
 
-          const lista = priceListPorPedido.get(i.order_id) ?? "(sin lista)";
+          const lista = i.price_list ?? "(sin lista)";
           const acumulado = priceListTotals.get(lista) ?? { total: 0, quantity: 0 };
           acumulado.total += Number(i.line_total);
           acumulado.quantity += Number(i.quantity);

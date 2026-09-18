@@ -76,6 +76,8 @@ export type OrderItemInput = {
   quantity: number;
   unitPrice: number;
   discountPercent?: number;
+  /** Lista de precio de ESTA línea. Si falta, el servidor usa la del pedido. */
+  priceList?: string;
 };
 
 export type CreateOrderResult =
@@ -110,6 +112,7 @@ export async function createOrderAction(input: CreateOrderInput): Promise<Create
       quantity: i.quantity,
       unit_price: i.unitPrice,
       discount_percent: i.discountPercent ?? 0,
+      price_list: i.priceList || undefined,
     })),
     p_payment_method: input.paymentMethod || undefined,
     p_retention_percent: input.retentionPercent,
@@ -147,6 +150,7 @@ export async function updateOrderAction(input: UpdateOrderInput): Promise<Create
       quantity: i.quantity,
       unit_price: i.unitPrice,
       discount_percent: i.discountPercent ?? 0,
+      price_list: i.priceList || undefined,
     })),
     p_payment_method: input.paymentMethod || undefined,
     p_retention_percent: input.retentionPercent,

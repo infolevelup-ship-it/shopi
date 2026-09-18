@@ -65,6 +65,9 @@ type Line = OrderItemInput & {
   // Las tres listas se guardan en la línea para poder re-tarifar sin volver
   // a consultar el producto cuando la vendedora cambia de lista.
   prices: Record<PriceList, number | null>;
+  // Cada línea lleva SU propia lista: un mismo pedido puede mezclar Salón,
+  // Profesional y Público entre distintos productos.
+  priceList: PriceList;
 };
 
 function lineNet(line: Line) {
@@ -82,6 +85,7 @@ export type OrderFormLine = {
   quantity: number;
   unitPrice: number;
   discountPercent: number;
+  priceList: PriceList;
 };
 
 export type OrderFormInitial = {
@@ -212,36 +216,50 @@ export function OrderForm({
   }, [isEdit, preselectedCustomerId]);
 
   // doc GUIA_B2C: en B2C el precio es el público, no hay retención y solo
-  // se cobra de contado. Cambiar de canal re-tarifa lo que ya esté cargado.
+  // se cobra de contado. Cambiar de canal es la única situación en la que SÍ
+  // se re-tarifa todo lo ya agregado: es un cambio de tipo de venta, no una
+  // preferencia por producto.
   function switchChannel(next: "B2B" | "B2C") {
     setChannel(next);
     if (next === "B2C") {
-      applyPriceList("publico");
+      forcePriceListOnAllLines("publico");
       setRetentionPercent(0);
       setPaymentMethod("contado");
     } else {
-      applyPriceList("salon");
+      forcePriceListOnAllLines("salon");
     }
   }
 
+  // Se re-tarifa con el mismo criterio del servidor, caída a la lista pública
+  // incluida. Antes se conservaba el precio anterior, que podía venir de otra
+  // lista: la pantalla mostraba uno y se guardaba otro.
+  function repriceLine(l: Line, list: PriceList): Line {
+    const next = precioDeLista(
+      {
+        price_public: l.prices.publico,
+        price_professional: l.prices.profesional,
+        price_salon: l.prices.salon,
+      },
+      list,
+    );
+    return next === null ? { ...l, priceList: list } : { ...l, priceList: list, unitPrice: next };
+  }
+
+  // El selector de arriba solo decide con qué lista arranca el PRÓXIMO
+  // producto que se agregue. No toca lo que ya está en el pedido — para eso
+  // está el selector de cada tarjeta, así una vendedora puede combinar Salón
+  // y Profesional en el mismo pedido sin que cambiar uno le mueva el otro.
   function applyPriceList(list: PriceList) {
     setPriceList(list);
-    setLines((ls) =>
-      ls.map((l) => {
-        const next = precioDeLista(
-          {
-            price_public: l.prices.publico,
-            price_professional: l.prices.profesional,
-            price_salon: l.prices.salon,
-          },
-          list,
-        );
-        // Se re-tarifa con el mismo criterio del servidor, caída a la lista
-        // pública incluida. Antes se conservaba el precio anterior, que podía
-        // venir de otra lista: la pantalla mostraba uno y se guardaba otro.
-        return next === null ? l : { ...l, unitPrice: next };
-      }),
-    );
+  }
+
+  function forcePriceListOnAllLines(list: PriceList) {
+    setPriceList(list);
+    setLines((ls) => ls.map((l) => repriceLine(l, list)));
+  }
+
+  function updateLinePriceList(key: string, list: PriceList) {
+    setLines((ls) => ls.map((l) => (l.key === key ? repriceLine(l, list) : l)));
   }
 
   function runCustomerSearch(q: string) {
@@ -280,6 +298,7 @@ export function OrderForm({
           profesional: p.price_professional,
           salon: p.price_salon,
         },
+        priceList,
         quantity: 1,
         unitPrice: precioDeLista(p, priceList) ?? 0,
         discountPercent: 0,
@@ -321,11 +340,12 @@ export function OrderForm({
 
     const common = {
       items: lines.map(
-        ({ productId, quantity, unitPrice, discountPercent }) => ({
+        ({ productId, quantity, unitPrice, discountPercent, priceList: linePriceList }) => ({
           productId,
           quantity,
           unitPrice,
           discountPercent,
+          priceList: linePriceList,
         }),
       ),
       paymentMethod,
@@ -394,7 +414,7 @@ export function OrderForm({
           <div className="mt-3">
             <SSelect
               id="price-list"
-              label="Lista de precio"
+              label="Lista de precio para lo próximo que agregues"
               value={priceList}
               onChange={(v) => applyPriceList(v as PriceList)}
               options={PRICE_LISTS.map((p) => ({
@@ -403,9 +423,12 @@ export function OrderForm({
               }))}
             />
             <p className="s-note mt-1">
-              Cambiarla vuelve a poner el precio de esa lista en los productos
-              ya agregados. Los precios salen del catálogo y no se editan a
-              mano; para bajar un precio, usa el descuento.
+              Cada producto que agregues de ahora en adelante sale con esta
+              lista. Para cambiar un producto que ya está en el pedido, usa
+              los botones de Público / Profesional / Salón en su tarjeta —
+              así puedes mezclar listas en el mismo pedido. Los precios salen
+              del catálogo y no se editan a mano; para bajar un precio, usa el
+              descuento.
             </p>
           </div>
         </SCard>
@@ -606,6 +629,32 @@ export function OrderForm({
                       />
                     </div>
 
+                    {/* Botones grandes y con la palabra completa a propósito
+                        (nada de íconos ni abreviaturas): quien usa esto no es
+                        técnica, y tiene que quedar claro con solo mirarlo qué
+                        lista está eligiendo para ESTE producto. */}
+                    <div className="mt-2">
+                      <p className="mb-1 text-xs font-medium text-text-soft">
+                        Lista de precio de este producto
+                      </p>
+                      <div className="grid grid-cols-3 gap-1">
+                        {PRICE_LISTS.map((pl) => (
+                          <button
+                            key={pl.value}
+                            type="button"
+                            onClick={() => updateLinePriceList(l.key, pl.value)}
+                            className={`min-h-[40px] rounded-lg border px-1 text-xs font-medium ${
+                              l.priceList === pl.value
+                                ? "border-primary bg-primary text-white"
+                                : "border-line-strong bg-surface text-text-soft"
+                            }`}
+                          >
+                            {pl.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* En Siigo no todos los productos tienen cargadas las tres
                         listas de precio. Sin este aviso, elegir "Salón" sobre un
                         producto que no la tiene dejaría el precio público sin que
@@ -620,10 +669,10 @@ export function OrderForm({
                       </p>
                     )}
 
-                    {l.prices[priceList] === null && (
+                    {l.prices[l.priceList] === null && (
                       <p className="mt-2 text-xs font-medium text-warning">
                         ⚠ Este producto no tiene precio en la lista{" "}
-                        {PRICE_LISTS.find((p) => p.value === priceList)?.label}.
+                        {PRICE_LISTS.find((p) => p.value === l.priceList)?.label}.
                         El precio de arriba viene de otra lista — revísalo.
                       </p>
                     )}

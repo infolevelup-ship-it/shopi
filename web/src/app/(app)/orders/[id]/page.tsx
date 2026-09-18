@@ -94,7 +94,7 @@ export default async function OrderDetailPage({
   const { data: items } = await supabase
     .from("order_items")
     .select(
-      "id, product_name_snapshot, product_code_snapshot, quantity, unit_price, discount_value, tax_percent, line_total, product:products(stock_cache)",
+      "id, product_name_snapshot, product_code_snapshot, quantity, unit_price, discount_value, tax_percent, line_total, price_list, product:products(stock_cache)",
     )
     .eq("order_id", id)
     .order("created_at", { ascending: true });
@@ -307,6 +307,9 @@ export default async function OrderDetailPage({
                         </span>
                         <div className="text-xs text-text-soft">
                           {item.product_code_snapshot}
+                          {item.price_list
+                            ? ` · ${labelOf([...PRICE_LISTS], item.price_list)}`
+                            : ""}
                         </div>
                       </td>
                       <td className="text-right">{item.quantity}</td>
@@ -362,6 +365,7 @@ export default async function OrderDetailPage({
                   </div>
                   <p className="mt-1 text-xs text-text-soft">
                     {item.product_code_snapshot}
+                    {item.price_list ? ` · ${labelOf([...PRICE_LISTS], item.price_list)}` : ""}
                   </p>
                   <p
                     className={`mt-1 text-sm ${

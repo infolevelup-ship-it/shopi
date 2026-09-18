@@ -1008,6 +1008,7 @@ export type Database = {
           line_tax: number
           line_total: number
           order_id: string
+          price_list: string | null
           product_code_snapshot: string
           product_id: string | null
           product_name_snapshot: string
@@ -1028,6 +1029,7 @@ export type Database = {
           line_tax?: number
           line_total: number
           order_id: string
+          price_list?: string | null
           product_code_snapshot: string
           product_id?: string | null
           product_name_snapshot: string
@@ -1048,6 +1050,7 @@ export type Database = {
           line_tax?: number
           line_total?: number
           order_id?: string
+          price_list?: string | null
           product_code_snapshot?: string
           product_id?: string | null
           product_name_snapshot?: string
