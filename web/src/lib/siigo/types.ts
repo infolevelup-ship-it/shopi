@@ -78,6 +78,11 @@ export type SiigoCustomer = {
     email?: string;
     phone?: { indicative?: string; number?: string; extension?: string };
   }[];
+  // Confirmado contra la cuenta real (2026-09-18): `created` es un timestamp
+  // completo (no solo fecha), y `created_start` en /v1/customers lo filtra
+  // con esa misma precisión. Es lo que permite importar solo lo nuevo sin
+  // volver a pasar por los ~26.000 terceros ya importados.
+  metadata?: { created?: string };
 };
 
 export type SiigoCustomerListResponse = {

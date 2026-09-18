@@ -320,13 +320,15 @@ export function IntegrationPanel({
         <p className="mt-1 mb-3 text-sm text-text-soft">
           Trae el maestro de terceros. Puede ser muy grande, así que{" "}
           <strong>avanza por tandas</strong>: cada vez que pulses importa lo que alcance y guarda
-          por dónde iba, sin repetir trabajo.
+          por dónde iba, sin repetir trabajo. Una vez terminado el recorrido completo, el mismo
+          botón pasa a traer <strong>solo los clientes nuevos</strong> que se hayan creado en
+          Siigo después de la última vez, sin volver a tocar a los que ya están.
         </p>
 
         <div className="mb-3 rounded-xl border border-line bg-surface-soft p-3 text-sm">
           {cursorActual.done ? (
             <p className="text-success">
-              ✔ Importación terminada: {cursorActual.imported} clientes.
+              ✔ Al día: {cursorActual.imported} clientes importados en total.
             </p>
           ) : cursorActual.imported > 0 ? (
             <p>
@@ -354,9 +356,9 @@ export function IntegrationPanel({
             className="btn btn-primary btn-block-mobile"
           >
             {isPending
-              ? "Importando…"
+              ? "Buscando…"
               : cursorActual.done
-                ? "Ya está al día"
+                ? "Buscar clientes nuevos"
                 : cursorActual.imported > 0
                   ? "Continuar importación"
                   : "Importar clientes"}
@@ -401,8 +403,18 @@ export function IntegrationPanel({
         {importe && importe.ok && (
           <div className="mt-3 rounded-xl border border-success/30 bg-success-bg p-3 text-sm">
             <p className="font-medium text-[#05834b]">
-              ✔ {importe.importadosAhora} clientes en esta tanda.
-              {importe.cursor.done ? " Importación completa." : " Pulsa de nuevo para continuar."}
+              {importe.incremental ? (
+                importe.importadosAhora > 0 ? (
+                  <>✔ {importe.importadosAhora} cliente{importe.importadosAhora === 1 ? "" : "s"} nuevo{importe.importadosAhora === 1 ? "" : "s"} desde la última revisión.</>
+                ) : (
+                  <>✔ No hay clientes nuevos desde la última revisión.</>
+                )
+              ) : (
+                <>
+                  ✔ {importe.importadosAhora} clientes en esta tanda.
+                  {importe.cursor.done ? " Importación completa." : " Pulsa de nuevo para continuar."}
+                </>
+              )}
             </p>
             {/* Un tipo de documento que no reconocemos no se adivina: sería
                 inventar un dato fiscal y la factura saldría mal. */}

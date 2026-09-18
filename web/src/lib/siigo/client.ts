@@ -130,11 +130,18 @@ export async function findSiigoCustomersByIdentification(identification: string)
 // Una página del maestro de terceros. El llamador controla el avance porque
 // el catálogo puede tener decenas de miles y no cabe en una sola petición
 // serverless: se importa por lotes, guardando por dónde iba.
+//
+// `createdStart` filtra por `metadata.created` con precisión de timestamp
+// completo (confirmado contra la cuenta real), no solo por fecha. Es lo que
+// permite traer únicamente lo creado en Siigo después de la última corrida,
+// en vez de recorrer el maestro completo cada vez.
 export async function listSiigoCustomersPage(
   page: number,
   pageSize = 100,
+  createdStart?: string,
 ): Promise<{ clientes: SiigoCustomer[]; total: number | null }> {
-  const res = await siigoFetch(`/v1/customers?page=${page}&page_size=${pageSize}`);
+  const filtro = createdStart ? `&created_start=${encodeURIComponent(createdStart)}` : "";
+  const res = await siigoFetch(`/v1/customers?page=${page}&page_size=${pageSize}${filtro}`);
   if (!res.ok) {
     throw new SiigoApiError("Error listando terceros de Siigo", res.status, await safeText(res));
   }

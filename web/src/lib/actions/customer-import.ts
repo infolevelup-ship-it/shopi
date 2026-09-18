@@ -18,7 +18,19 @@ const PAGE_SIZE = 100;
 // de intentar traer 26.000 clientes en una sola petición y morir a la mitad.
 const PRESUPUESTO_MS = 35_000;
 
-export type ImportCursor = { page: number; imported: number; total: number | null; done: boolean };
+export type ImportCursor = {
+  page: number;
+  imported: number;
+  total: number | null;
+  done: boolean;
+  /**
+   * Fecha de creación (en Siigo) del cliente más reciente que ya se procesó,
+   * de cualquier corrida (completa o incremental). Es lo que permite, una vez
+   * `done`, seguir pulsando el botón para traer solo lo que Siigo creó
+   * después de esto, sin tener que recorrer otra vez el maestro completo.
+   */
+  ultimoCreado: string | null;
+};
 
 export type CustomerImportResult =
   | {
@@ -27,6 +39,8 @@ export type CustomerImportResult =
       omitidos: number;
       /** Venían con un documento que ya traía otro tercero en la misma tanda. */
       duplicados: number;
+      /** true cuando esta tanda fue "solo lo nuevo desde la última vez" y no un recorrido completo. */
+      incremental: boolean;
       cursor: ImportCursor;
     }
   | { ok: false; error: string };
@@ -101,13 +115,24 @@ export async function getImportCursor(): Promise<ImportCursor> {
     imported: typeof raw?.imported === "number" ? raw.imported : 0,
     total: typeof raw?.total === "number" ? raw.total : null,
     done: raw?.done === true,
+    ultimoCreado: typeof raw?.ultimoCreado === "string" ? raw.ultimoCreado : null,
   };
+}
+
+function fechaCreacion(c: SiigoCustomer): string | null {
+  return c.metadata?.created ?? null;
 }
 
 /**
  * Importa el maestro de terceros de Siigo por lotes. Cada pulsación avanza lo
  * que alcance dentro del presupuesto de tiempo y guarda por dónde iba, así que
  * se puede repetir hasta terminar sin perder trabajo.
+ *
+ * Una vez el recorrido completo queda `done`, seguir pulsando NO lo repite:
+ * pasa a modo incremental y solo trae lo que Siigo creó después de
+ * `ultimoCreado` (confirmado contra la cuenta real: `created_start` filtra
+ * por ese timestamp con precisión exacta). Así se puede traer un cliente
+ * nuevo sin tocar a ninguno de los ya importados.
  */
 export async function importCustomersFromSiigoAction(
   reiniciar = false,
@@ -128,25 +153,47 @@ export async function importCustomersFromSiigoAction(
   const supabase = await createClient();
   const serviceClient = createServiceRoleClient();
   const cursor = reiniciar
-    ? { page: 1, imported: 0, total: null as number | null, done: false }
+    ? {
+        page: 1,
+        imported: 0,
+        total: null as number | null,
+        done: false,
+        ultimoCreado: null as string | null,
+      }
     : await getImportCursor();
 
-  if (cursor.done && !reiniciar) {
-    return { ok: true, importadosAhora: 0, omitidos: 0, duplicados: 0, cursor };
-  }
+  const incremental = cursor.done && !reiniciar;
+
+  // Cursor `done` de antes de que existiera `ultimoCreado`: no hay de dónde
+  // partir sin recorrer el maestro completo otra vez. Se arranca con un
+  // margen de 7 días hacia atrás (barato de recorrer, page_size 100) en vez
+  // de "ahora mismo", para no dejar pasar algo creado justo antes de este
+  // cambio.
+  const cortePorDefecto = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const createdStart = incremental ? cursor.ultimoCreado ?? cortePorDefecto : undefined;
 
   const arranque = Date.now();
-  let page = cursor.page;
+  // El modo incremental pagina su propio recorrido filtrado desde la página
+  // 1: la posición guardada en `cursor.page` es del recorrido completo (ya
+  // terminado) y no tiene nada que ver con esta consulta filtrada.
+  let page = incremental ? 1 : cursor.page;
   let importadosAhora = 0;
   let omitidos = 0;
   let duplicados = 0;
   let total = cursor.total;
   let terminado = false;
+  let ultimoCreado = cursor.ultimoCreado;
 
   try {
     while (Date.now() - arranque < PRESUPUESTO_MS) {
-      const { clientes, total: totalSiigo } = await listSiigoCustomersPage(page, PAGE_SIZE);
-      if (totalSiigo != null) total = totalSiigo;
+      const { clientes, total: totalSiigo } = await listSiigoCustomersPage(
+        page,
+        PAGE_SIZE,
+        createdStart,
+      );
+      // El total de una consulta filtrada es el de LO NUEVO, no el del
+      // maestro completo: no se debe usar para reemplazar el total mostrado.
+      if (!incremental && totalSiigo != null) total = totalSiigo;
 
       if (clientes.length === 0) {
         terminado = true;
@@ -176,6 +223,14 @@ export async function importCustomersFromSiigoAction(
         duplicados += resumen.duplicados ?? 0;
       }
 
+      // Solo avanza sobre lo que ya se guardó de verdad: si el presupuesto se
+      // corta a mitad de una página, la próxima corrida vuelve a pedir desde
+      // el mismo punto en vez de saltarse algo.
+      for (const c of clientes) {
+        const creado = fechaCreacion(c);
+        if (creado && (!ultimoCreado || creado > ultimoCreado)) ultimoCreado = creado;
+      }
+
       page += 1;
       if (clientes.length < PAGE_SIZE) {
         terminado = true;
@@ -190,25 +245,29 @@ export async function importCustomersFromSiigoAction(
           ? err.message
           : "Error desconocido";
     // El cursor se guarda igual: lo ya importado no se pierde y la siguiente
-    // pulsación retoma donde se cortó.
+    // pulsación retoma donde se cortó. El recorrido completo sigue `done`
+    // aunque el chequeo incremental falle a mitad de camino — lo que se
+    // reintenta es la búsqueda de lo nuevo, no el maestro entero.
     await guardarCursor(serviceClient, {
-      page,
+      page: incremental ? cursor.page : page,
       imported: cursor.imported + importadosAhora,
-      total,
-      done: false,
+      total: incremental ? cursor.total : total,
+      done: incremental ? true : false,
+      ultimoCreado,
     });
     return { ok: false, error: `Se cortó la importación. ${mensaje}` };
   }
 
   const nuevo: ImportCursor = {
-    page,
+    page: incremental ? cursor.page : page,
     imported: cursor.imported + importadosAhora,
-    total,
-    done: terminado,
+    total: incremental ? cursor.total : total,
+    done: incremental ? true : terminado,
+    ultimoCreado,
   };
   await guardarCursor(serviceClient, nuevo);
 
-  return { ok: true, importadosAhora, omitidos, duplicados, cursor: nuevo };
+  return { ok: true, importadosAhora, omitidos, duplicados, incremental, cursor: nuevo };
 }
 
 async function guardarCursor(
