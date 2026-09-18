@@ -194,7 +194,10 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
   const listasVistas = new Set<string>();
   let sinPrecio = 0;
   let conListaIncompleta = 0;
+  let creados = 0;
   const filas = utilizables.map((p) => {
+    const idExistente = idPorSiigo.get(String(p.id)) ?? idPorCodigo.get(p.code);
+    if (!idExistente) creados++;
     const impuesto = iva(p);
     const { price_public, price_professional, price_salon, nombres, faltantes } = precios(
       p,
@@ -210,10 +213,12 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
     return {
       // Conservar el id existente hace que el upsert sea una actualización de
       // esa fila y no una fila nueva, que rompería las referencias de pedidos.
-      ...(() => {
-        const existente = idPorSiigo.get(String(p.id)) ?? idPorCodigo.get(p.code);
-        return existente ? { id: existente } : {};
-      })(),
+      // Siempre se manda un id (existente o nuevo): si algunas filas del lote
+      // lo omiten, PostgREST arma el INSERT con json_populate_recordset, que
+      // rellena la columna faltante con NULL en vez del DEFAULT de la tabla,
+      // y el insert de un producto genuinamente nuevo revienta el lote entero
+      // contra el not-null constraint de "id".
+      id: idExistente ?? crypto.randomUUID(),
       siigo_product_id: String(p.id),
       code: p.code,
       name: p.name,
@@ -233,8 +238,6 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
   if (error) {
     return { ok: false, error: `No se pudo guardar el catálogo: ${error.message}` };
   }
-
-  const creados = filas.filter((f) => !("id" in f)).length;
 
   await serviceClient.from("integration_logs").insert({
     system: "SIIGO",
