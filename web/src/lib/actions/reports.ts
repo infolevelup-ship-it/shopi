@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
+import { PRICE_LISTS } from "@/lib/ui/fiscal";
 
 // Fase 11 (doc 10 §14, doc 01 §32/§52-53). Alcance: lo que cada rol
 // realmente necesita (doc 05) — vendedora ve lo suyo, bodega ve operación,
@@ -49,6 +50,13 @@ export type OperationsReport = {
   avgHoursToInvoice: number | null;
 };
 export type BreakdownRow = { name: string; total: number };
+/**
+ * Cuánto y cuántas unidades se vendieron con cada lista de precio
+ * (público/profesional/salón), sin importar cómo esté clasificado el
+ * cliente: la lista se elige pedido por pedido (doc: order-form.tsx), así
+ * que un mismo cliente puede aparecer en varias.
+ */
+export type PriceListBreakdown = { priceList: string; label: string; total: number; quantity: number };
 export type LowStockProduct = { name: string; code: string; stock: number | null };
 
 export type ReportsData = {
@@ -61,6 +69,7 @@ export type ReportsData = {
   bySeller: BreakdownRow[] | null;
   byCustomer: BreakdownRow[] | null;
   byProduct: BreakdownRow[] | null;
+  byPriceList: PriceListBreakdown[] | null;
   atRiskCount: number | null;
   lowStockProducts: LowStockProduct[] | null;
 };
@@ -81,6 +90,7 @@ export async function getReportsData(range: ReportRange): Promise<ReportsData | 
   let bySeller: BreakdownRow[] | null = null;
   let byCustomer: BreakdownRow[] | null = null;
   let byProduct: BreakdownRow[] | null = null;
+  let byPriceList: PriceListBreakdown[] | null = null;
   let atRiskCount: number | null = null;
 
   // Ventas + embudo comercial: la vendedora ve lo suyo; supervisor/admin ven
@@ -88,7 +98,7 @@ export async function getReportsData(range: ReportRange): Promise<ReportsData | 
   if (isSeller || isSupervisorOrAdmin) {
     let invoicedQuery = supabase
       .from("orders")
-      .select("id, grand_total, seller_id, customer_id, seller:users!orders_seller_id_fkey(name), customer:customers(commercial_name, legal_name, first_name, last_name)")
+      .select("id, grand_total, seller_id, customer_id, price_list, seller:users!orders_seller_id_fkey(name), customer:customers(commercial_name, legal_name, first_name, last_name)")
       .eq("status", "INVOICED")
       .gte("invoiced_at", startIso);
     if (isSeller) invoicedQuery = invoicedQuery.eq("seller_id", profile.id);
@@ -122,19 +132,42 @@ export async function getReportsData(range: ReportRange): Promise<ReportsData | 
       // sin depender de sintaxis de embeds que no se ha probado.
       const invoicedOrderIds = (invoicedOrders ?? []).map((o) => o.id);
       const productTotals = new Map<string, number>();
+      // La lista de precio vive en `orders`, no en cada línea (se elige una
+      // vez por pedido — order-form.tsx): para sumar cantidades por lista hay
+      // que mirar de qué pedido viene cada línea.
+      const priceListPorPedido = new Map(
+        (invoicedOrders ?? []).map((o) => [o.id, o.price_list ?? "(sin lista)"]),
+      );
+      const priceListTotals = new Map<string, { total: number; quantity: number }>();
       if (invoicedOrderIds.length > 0) {
         const { data: items } = await supabase
           .from("order_items")
-          .select("product_name_snapshot, line_total")
+          .select("order_id, product_name_snapshot, quantity, line_total")
           .in("order_id", invoicedOrderIds);
         for (const i of items ?? []) {
           productTotals.set(i.product_name_snapshot, (productTotals.get(i.product_name_snapshot) ?? 0) + Number(i.line_total));
+
+          const lista = priceListPorPedido.get(i.order_id) ?? "(sin lista)";
+          const acumulado = priceListTotals.get(lista) ?? { total: 0, quantity: 0 };
+          acumulado.total += Number(i.line_total);
+          acumulado.quantity += Number(i.quantity);
+          priceListTotals.set(lista, acumulado);
         }
       }
       byProduct = [...productTotals.entries()]
         .map(([name, total]) => ({ name, total }))
         .sort((a, b) => b.total - a.total)
         .slice(0, 10);
+
+      const etiquetaLista = new Map<string, string>(PRICE_LISTS.map((p) => [p.value, p.label]));
+      byPriceList = [...priceListTotals.entries()]
+        .map(([priceList, { total, quantity }]) => ({
+          priceList,
+          label: etiquetaLista.get(priceList) ?? priceList,
+          total,
+          quantity,
+        }))
+        .sort((a, b) => b.total - a.total);
     }
 
     let newCustomersQuery = supabase.from("customers").select("id", { count: "exact", head: true }).gte("created_at", startIso);
@@ -224,6 +257,7 @@ export async function getReportsData(range: ReportRange): Promise<ReportsData | 
     bySeller,
     byCustomer,
     byProduct,
+    byPriceList,
     atRiskCount,
     lowStockProducts,
   };

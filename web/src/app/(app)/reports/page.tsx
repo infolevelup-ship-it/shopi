@@ -156,6 +156,31 @@ export default async function ReportsPage({
         </div>
       )}
 
+      {data.byPriceList && data.byPriceList.length > 0 && (
+        <Section title="Ventas por lista de precio">
+          <div className="card overflow-hidden">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Lista</th>
+                  <th className="text-right">Unidades vendidas</th>
+                  <th className="text-right">Valor vendido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byPriceList.map((p) => (
+                  <tr key={p.priceList}>
+                    <td>{p.label}</td>
+                    <td className="text-right">{formatNumber(p.quantity)}</td>
+                    <td className="text-right font-medium">{formatMoney(p.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+
       {data.lowStockProducts && data.lowStockProducts.length > 0 && (
         <Section title="Inventario más bajo">
           <div className="card card-pad grid gap-2 text-sm">
