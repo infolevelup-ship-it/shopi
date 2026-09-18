@@ -16,7 +16,7 @@ import {
   formatMoney,
   formatNumber,
 } from "@/lib/ui/format";
-import { precioSospechoso } from "@/lib/ui/precios";
+import { precioConIvaPorUnidad, precioSospechoso } from "@/lib/ui/precios";
 import {
   EDITABLE_ORDER_STATUSES,
   PAYMENT_METHOD_LABEL,
@@ -315,10 +315,10 @@ export default async function OrderDetailPage({
                           // Último filtro antes de facturar: si esto pasa, sale
                           // una factura electrónica por ese valor.
                           <span className="font-semibold text-danger">
-                            {formatMoney(item.unit_price)} ⚠
+                            {formatMoney(precioConIvaPorUnidad(item))} ⚠
                           </span>
                         ) : (
-                          formatMoney(item.unit_price)
+                          formatMoney(precioConIvaPorUnidad(item))
                         )}
                       </td>
                       {isReviewer && (
@@ -370,7 +370,7 @@ export default async function OrderDetailPage({
                         : "text-text-soft"
                     }`}
                   >
-                    {item.quantity} × {formatMoney(item.unit_price)}
+                    {item.quantity} × {formatMoney(precioConIvaPorUnidad(item))}
                     {precioSospechoso(item.unit_price) ? " ⚠" : ""}
                   </p>
                   {isReviewer && (

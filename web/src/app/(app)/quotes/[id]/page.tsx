@@ -8,7 +8,7 @@ import { customerDisplayName, formatDate, formatMoney } from "@/lib/ui/format";
 import { PAYMENT_METHOD_LABEL } from "@/lib/ui/status";
 import { PRICE_LISTS } from "@/lib/ui/fiscal";
 import { getProductsByIds } from "@/lib/actions/products";
-import { precioDeLista } from "@/lib/ui/precios";
+import { precioConIvaPorUnidad, precioDeLista } from "@/lib/ui/precios";
 
 function Condition({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
@@ -151,7 +151,7 @@ export default async function QuoteDetailPage({
                       <div className="text-xs text-text-soft">{item.product_code_snapshot}</div>
                     </td>
                     <td className="text-right">{item.quantity}</td>
-                    <td className="text-right">{formatMoney(item.unit_price)}</td>
+                    <td className="text-right">{formatMoney(precioConIvaPorUnidad(item))}</td>
                     <td className="text-right font-medium">{formatMoney(item.line_total)}</td>
                   </tr>
                 ))}
@@ -170,7 +170,7 @@ export default async function QuoteDetailPage({
                 </div>
                 <p className="mt-1 text-xs text-text-soft">{item.product_code_snapshot}</p>
                 <p className="mt-1 text-sm text-text-soft">
-                  {item.quantity} × {formatMoney(item.unit_price)}
+                  {item.quantity} × {formatMoney(precioConIvaPorUnidad(item))}
                 </p>
               </li>
             ))}

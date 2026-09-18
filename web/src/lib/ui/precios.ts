@@ -31,3 +31,23 @@ export function precioDeLista(p: ListasDePrecio, lista: string | null | undefine
   if (lista === "salon") return p.price_salon ?? p.price_public;
   return p.price_public;
 }
+
+/**
+ * El "Precio" que ve la vendedora y el cliente en pantalla: el mismo número
+ * con IVA incluido que ya conocen de Siigo. `unit_price` en
+ * `order_items`/`quote_items` queda a propósito en base sin IVA (así
+ * `buildSiigoInvoicePayload` factura correcto: le manda a Siigo la base y el
+ * id de IVA por separado, y Siigo suma el impuesto en la factura real), así
+ * que para mostrarlo se deriva del total de la línea en vez de recalcular el
+ * IVA por separado: así "Precio" × "Cant." siempre calza exacto con "Total",
+ * sin depender de un redondeo independiente que los desalinee por un peso.
+ */
+export function precioConIvaPorUnidad(item: {
+  line_total: number | string | null;
+  quantity: number | string | null;
+}): number {
+  const total = Number(item.line_total ?? 0);
+  const cantidad = Number(item.quantity ?? 0);
+  if (!cantidad) return total;
+  return total / cantidad;
+}
