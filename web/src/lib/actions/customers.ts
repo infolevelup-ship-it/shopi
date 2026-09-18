@@ -16,6 +16,13 @@ export async function getCurrentUserIdAction(): Promise<string | null> {
   return profile?.id ?? null;
 }
 
+/** Mismo motivo que `getCurrentUserIdAction`: el formulario de pedido nuevo
+ * es "use client" y necesita el rol para decidir si muestra inventario. */
+export async function getCurrentUserRoleAction(): Promise<string | null> {
+  const profile = await getCurrentProfile();
+  return profile?.role ?? null;
+}
+
 function normalizeDocument(raw: string) {
   return raw.replace(/\D/g, "");
 }

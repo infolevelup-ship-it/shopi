@@ -102,6 +102,7 @@ export default async function EditOrderPage({
         notes: order.notes ?? "",
       }}
       currentUserId={profile?.id}
+      role={profile?.role}
     />
   );
 }

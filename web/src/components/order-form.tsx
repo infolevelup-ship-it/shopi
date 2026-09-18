@@ -108,6 +108,7 @@ export function OrderForm({
   initial,
   preselectedCustomerId = null,
   currentUserId,
+  role,
 }: {
   mode: "create" | "edit";
   orderId?: string;
@@ -120,9 +121,12 @@ export function OrderForm({
    * cliente", así que el aviso simplemente no sale.
    */
   currentUserId?: string;
+  /** Decisión del negocio: las vendedoras no ven inventario, en ningún lado. */
+  role?: string | null;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit";
+  const verInventario = role !== "SELLER";
 
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<
@@ -536,7 +540,7 @@ export function OrderForm({
                       </span>
                       <span className="block text-sm text-text-soft">
                         {p.code}
-                        {p.stock_cache !== null
+                        {verInventario && p.stock_cache !== null
                           ? ` · stock aprox. ${formatNumber(p.stock_cache)}`
                           : ""}
                       </span>
@@ -625,17 +629,21 @@ export function OrderForm({
                     )}
 
                     <div className="mt-2 flex items-center justify-between text-sm">
-                      <span
-                        className={
-                          short ? "font-medium text-danger" : "text-text-soft"
-                        }
-                      >
-                        {l.stock === null
-                          ? "Inventario sin datos"
-                          : short
-                            ? `Solo hay ${l.stock} en inventario`
-                            : `Inventario: ${l.stock}`}
-                      </span>
+                      {verInventario ? (
+                        <span
+                          className={
+                            short ? "font-medium text-danger" : "text-text-soft"
+                          }
+                        >
+                          {l.stock === null
+                            ? "Inventario sin datos"
+                            : short
+                              ? `Solo hay ${l.stock} en inventario`
+                              : `Inventario: ${l.stock}`}
+                        </span>
+                      ) : (
+                        <span />
+                      )}
                       <span className="font-semibold">
                         {formatMoney(lineNet(l))}
                       </span>

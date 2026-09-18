@@ -37,6 +37,11 @@ export default async function ProductsPage({
     listProducts(q, page, POR_PAGINA),
   ]);
 
+  // Decisión del negocio: las vendedoras no ven inventario. El dato ya llega
+  // anulado desde `listProducts` para ese rol; aquí además no se muestra ni
+  // la columna, para no dejar un "sin datos" donde antes había un número.
+  const verInventario = profile?.role !== "SELLER";
+
   const totalPages = Math.max(1, Math.ceil(primera.total / POR_PAGINA));
   const paginaReal = Math.min(page, totalPages);
   const { rows: products, total } =
@@ -86,7 +91,7 @@ export default async function ProductsPage({
                   <th className="text-right">Público</th>
                   <th className="text-right">Profesional</th>
                   <th className="text-right">Salón</th>
-                  <th>Inventario</th>
+                  {verInventario && <th>Inventario</th>}
                 </tr>
               </thead>
               <tbody>
@@ -108,9 +113,11 @@ export default async function ProductsPage({
                     <td className="text-right text-text-soft">
                       {p.price_salon ? formatMoney(p.price_salon) : "—"}
                     </td>
-                    <td>
-                      <StockCell stock={p.stock_cache} />
-                    </td>
+                    {verInventario && (
+                      <td>
+                        <StockCell stock={p.stock_cache} />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -131,7 +138,7 @@ export default async function ProductsPage({
                   {p.brand ? ` · ${p.brand}` : ""}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                  <StockCell stock={p.stock_cache} />
+                  {verInventario && <StockCell stock={p.stock_cache} />}
                   {!p.active && <Tone_ tone="neutral">Inactivo</Tone_>}
                   {!p.siigo_product_id && <Tone_ tone="warning">Sin Siigo</Tone_>}
                 </div>

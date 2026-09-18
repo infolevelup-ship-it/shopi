@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth";
 
 export type ProductSearchResult = {
   id: string;
@@ -31,6 +32,16 @@ function filtroDeBusqueda(q: string) {
   return `code.ilike.${patron},name.ilike.${patron},brand.ilike.${patron}`;
 }
 
+// Decisión del negocio: las vendedoras no ven el inventario, nadie más queda
+// afuera. Se anula el número aquí, antes de que salga hacia el navegador —
+// ocultar la columna en pantalla no alcanza, porque la respuesta de este
+// action de todos modos viaja completa al cliente.
+async function segunRol<T extends { stock_cache: number | null }>(rows: T[]): Promise<T[]> {
+  const profile = await getCurrentProfile();
+  if (profile?.role !== "SELLER") return rows;
+  return rows.map((r) => ({ ...r, stock_cache: null }));
+}
+
 /** Para los buscadores con sugerencias: las primeras coincidencias, nada más. */
 export async function searchProducts(query: string): Promise<ProductSearchResult[]> {
   const supabase = await createClient();
@@ -46,7 +57,7 @@ export async function searchProducts(query: string): Promise<ProductSearchResult
   if (error) {
     throw new Error(`No se pudo buscar productos: ${error.message}`);
   }
-  return data ?? [];
+  return segunRol(data ?? []);
 }
 
 export type ProductPage = {
@@ -87,7 +98,7 @@ export async function listProducts(
   if (error) {
     throw new Error(`No se pudo buscar productos: ${error.message}`);
   }
-  return { rows: data ?? [], total: count ?? 0 };
+  return { rows: await segunRol(data ?? []), total: count ?? 0 };
 }
 
 // Para editar un pedido hace falta re-tarifar sus líneas, y `order_items`
@@ -102,7 +113,7 @@ export async function getProductsByIds(ids: string[]): Promise<ProductSearchResu
     .in("id", ids);
 
   if (error) throw new Error(`No se pudieron cargar los productos: ${error.message}`);
-  return data ?? [];
+  return segunRol(data ?? []);
 }
 
 export type CreateProductInput = {
