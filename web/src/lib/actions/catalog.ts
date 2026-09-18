@@ -20,6 +20,8 @@ export type CatalogSyncResult =
       descartados: number;
       /** Códigos repetidos en Siigo: se guardó una sola vez cada uno. */
       duplicados: number;
+      /** El código quedó apuntando a otro producto que el siigo_product_id: se dejaron sin tocar. */
+      conflictos: number;
       listasDePrecio: string[];
     }
   | { ok: false; error: string };
@@ -191,11 +193,31 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
     };
   }
 
+  // Caso raro pero real: el código quedó apuntando a otro producto que el
+  // siigo_product_id (p. ej. alguien reutilizó un código en Siigo, o el
+  // producto se editó a mitad de la paginación). Si se le da prioridad al
+  // siigo_product_id como de costumbre, el upsert por código terminaría
+  // reasignando el id de una fila EXISTENTE distinta — y como pedidos y
+  // cotizaciones referencian ese id, el UPDATE choca contra sus foreign
+  // keys y tumba el lote completo. Mejor dejar ese producto puntual sin
+  // sincronizar (se ve en el resumen) que arriesgar la integridad de los
+  // demás 1700+.
+  let conflictos = 0;
+  const utilizablesSinConflicto = utilizables.filter((p) => {
+    const idPorSiigoProducto = idPorSiigo.get(String(p.id));
+    const idPorCodigoProducto = idPorCodigo.get(p.code);
+    if (idPorSiigoProducto && idPorCodigoProducto && idPorSiigoProducto !== idPorCodigoProducto) {
+      conflictos++;
+      return false;
+    }
+    return true;
+  });
+
   const listasVistas = new Set<string>();
   let sinPrecio = 0;
   let conListaIncompleta = 0;
   let creados = 0;
-  const filas = utilizables.map((p) => {
+  const filas = utilizablesSinConflicto.map((p) => {
     const idExistente = idPorSiigo.get(String(p.id)) ?? idPorCodigo.get(p.code);
     if (!idExistente) creados++;
     const impuesto = iva(p);
@@ -264,6 +286,7 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
       con_lista_incompleta: conListaIncompleta,
       descartados,
       duplicados,
+      conflictos,
       listas_de_precio: [...listasVistas],
     },
   });
@@ -277,6 +300,7 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
     conListaIncompleta,
     descartados,
     duplicados,
+    conflictos,
     listasDePrecio: [...listasVistas],
   };
 }

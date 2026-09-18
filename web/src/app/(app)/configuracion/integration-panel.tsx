@@ -303,6 +303,13 @@ export function IntegrationPanel({
                 primero de cada código: hay que corregirlos en Siigo.
               </p>
             )}
+            {catalogo.conflictos > 0 && (
+              <p className="mt-1 text-[#b54708]">
+                ⚠ {catalogo.conflictos} productos tienen un código que en Siigo ya le pertenece a
+                otro producto distinto. Se dejaron sin tocar para no dañar pedidos o cotizaciones
+                existentes: hay que revisar esos códigos en Siigo y volver a sincronizar.
+              </p>
+            )}
           </div>
         )}
       </section>
