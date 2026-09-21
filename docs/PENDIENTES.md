@@ -55,6 +55,21 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
 - [ ] Retención al 10%: el formulario la ofrece pero no se encontró en el catálogo real de Siigo —
       **riesgo real**, revisar antes de construir el `InvoiceService` (Fase 7).
 - [ ] Rate limits de la API de Siigo.
+- [x] **Formato del descuento de línea (`items[].discount`) según el comprobante** — confirmado
+      contra la cuenta real (2026-09-21, pedido WOW-P-0000061, primera factura contra el documento
+      electrónico real tras apagar el modo de pruebas): NO es el mismo formato en todos los
+      comprobantes de la cuenta.
+      - Documento de pruebas (37934, "Documento de ingreso"): `discount` es un **porcentaje**
+        (confirmado 2026-09-10, WOW-P-0000048, y reconfirmado en varios pedidos reales del 18-21
+        de septiembre con descuentos de 15-20% que facturaron bien).
+      - Factura Electrónica de Venta (34963, la real, la que llega a la DIAN): `discount` es un
+        **valor en pesos** que Siigo resta de `price*qty` — igual a como ya lo hacía
+        `formulario/WOW_Pedidos_B2B_v3.html` (`discValLinea`), el formulario que facturaba contra
+        esta misma cuenta antes de esta app. Mandarle el porcentaje crudo se leía como "unos pocos
+        pesos de descuento" en líneas de cientos de miles/millones — casi cero — y Siigo rechazaba
+        con `invalid_total_payments` porque el total que calculaba quedaba muy por encima del de
+        `payments`. Corregido en `siigoLineDiscount` (`web/src/lib/siigo/client.ts`): calcula el
+        descuento en pesos cuando el documento es el real, en porcentaje cuando es el de pruebas.
 
 ## GHL (fase 9-10, sin empezar)
 

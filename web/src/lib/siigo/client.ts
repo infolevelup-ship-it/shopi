@@ -326,8 +326,11 @@ export function buildSiigoCustomerPayload(customer: WowCustomerForSiigo): SiigoC
 // menos se puede dar por buena sin la primera prueba real. Ver
 // docs/PENDIENTES.md § Fase 7-8 para el detalle exacto de qué falta probar.
 
-// Validado (doc 06 §19): único tipo de documento electrónico vigente en la
-// cuenta — no hay que elegir en tiempo de ejecución.
+// Validado (doc 06 §19): id de la Factura Electrónica de Venta, la real (la
+// que llega a la DIAN). Cuál se usa en cada facturación SÍ se elige en
+// tiempo de ejecución (`siigo_invoice_document_id` en app_settings, ver
+// integrations/settings.ts) — este id se compara contra ese valor más abajo
+// para saber si el descuento de línea va en pesos o en porcentaje.
 export const SIIGO_INVOICE_DOCUMENT_TYPE_ID = 34963;
 
 // Validado (doc 06 §14): catálogo real de Retefuente de la cuenta de WOW.
@@ -397,6 +400,28 @@ function addDays(date: Date, days: number) {
   return d;
 }
 
+// Confirmado contra la cuenta real (2026-09-21, pedido WOW-P-0000061): el
+// campo `discount` de un ítem de factura NO significa lo mismo en todos los
+// comprobantes de la cuenta — depende de cómo esté configurado ESE
+// comprobante en Siigo, no es un formato fijo de la API:
+//   - Documento de pruebas (37934): `discount` es un PORCENTAJE (confirmado
+//     2026-09-10, WOW-P-0000048 — reconfirmado en pedidos reales del 18 y
+//     21 de septiembre con descuentos de 15-20% que sí facturaron bien).
+//   - Factura Electrónica de Venta (34963, la real): `discount` es un valor
+//     en PESOS que Siigo resta de `price*qty` — igual a como ya lo hacía
+//     `formulario/WOW_Pedidos_B2B_v3.html` (`discValLinea`), el formulario
+//     que facturaba contra esta misma cuenta antes de esta app. Mandarle el
+//     porcentaje crudo (p.ej. 15) se lee como "$15 de descuento" en una
+//     línea de más de un millón de pesos — casi cero — y Siigo rechaza la
+//     factura con invalid_total_payments porque el total que calcula queda
+//     muy por encima de lo que se manda en `payments`.
+function siigoLineDiscount(item: SiigoInvoiceOrderItemInput, documentTypeId: number): number | undefined {
+  if (!item.discountPercent) return undefined;
+  if (documentTypeId !== SIIGO_INVOICE_DOCUMENT_TYPE_ID) return item.discountPercent;
+  const lineSubtotal = item.unitPrice * item.quantity;
+  return Math.round(lineSubtotal * (item.discountPercent / 100) * 100) / 100;
+}
+
 export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoInvoiceCreatePayload {
   const retentionId = getSiigoRetentionId(input.retentionPercent);
 
@@ -411,7 +436,7 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
       description: item.name,
       quantity: item.quantity,
       price: item.unitPrice,
-      discount: item.discountPercent || undefined,
+      discount: siigoLineDiscount(item, input.documentTypeId),
       taxes: item.siigoTaxId ? [{ id: item.siigoTaxId }] : undefined,
     })),
     payments: [
