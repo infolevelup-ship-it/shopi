@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { syncCustomerToGhlAction } from "@/lib/actions/ghl";
 import { pushCustomerUpdateToSiigoAction } from "@/lib/actions/siigo";
+import { customerDisplayName } from "@/lib/ui/format";
 
 /**
  * El id del usuario WOW actual, para el formulario de pedido que se arma en
@@ -225,16 +226,6 @@ export async function checkDuplicateCustomer(
     throw new Error(`No se pudo validar duplicados: ${exactError.message}`);
   }
 
-  const displayName = (c: {
-    legal_name: string | null;
-    first_name: string | null;
-    last_name: string | null;
-    commercial_name: string | null;
-  }) =>
-    c.commercial_name ??
-    c.legal_name ??
-    `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
-
   let phoneMatches: DuplicateCheckResult["phoneMatches"] = [];
   if (phone && phone.trim()) {
     const { data: byPhone, error: phoneError } = await supabase
@@ -251,14 +242,14 @@ export async function checkDuplicateCustomer(
     }
     phoneMatches = (byPhone ?? []).map((c) => ({
       id: c.id,
-      display_name: displayName(c),
+      display_name: customerDisplayName(c),
       phone: c.phone ?? "",
     }));
   }
 
   return {
     exactMatch: exact
-      ? { id: exact.id, display_name: displayName(exact) }
+      ? { id: exact.id, display_name: customerDisplayName(exact) }
       : null,
     phoneMatches,
   };

@@ -80,7 +80,16 @@ export function formatRelative(iso: string | null | undefined) {
   return `hace ${months} ${months === 1 ? "mes" : "meses"}`;
 }
 
-/** El nombre con el que se conoce a un cliente, con el mismo criterio en todas partes. */
+/**
+ * El nombre con el que se conoce a un cliente, con el mismo criterio en todas partes.
+ *
+ * Prioriza la razón social (o el nombre de persona natural) porque es el dato fiscal
+ * — el que de verdad queda facturado — y es el que bodega/ventas buscan cuando conocen
+ * a un cliente por su empresa y no por el nombre del local. El nombre comercial se
+ * agrega entre paréntesis solo como referencia, nunca reemplaza al fiscal (confirmado
+ * con el equipo 2026-09-22: mostrar primero el comercial confundía al facturar y al
+ * buscar clientes por razón social).
+ */
 export function customerDisplayName(c: {
   commercial_name?: string | null;
   legal_name?: string | null;
@@ -89,9 +98,9 @@ export function customerDisplayName(c: {
   document_number?: string | null;
 } | null): string {
   if (!c) return "—";
-  return (
-    c.commercial_name ??
-    c.legal_name ??
-    (`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.document_number || "—")
-  );
+  const nombreFiscal =
+    c.legal_name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.commercial_name || c.document_number || "—";
+  return c.commercial_name && c.commercial_name !== nombreFiscal
+    ? `${nombreFiscal} (${c.commercial_name})`
+    : nombreFiscal;
 }

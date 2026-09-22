@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SiigoSyncButton } from "@/app/(app)/customers/[id]/siigo-sync-button";
+import { customerDisplayName } from "@/lib/ui/format";
 
 // doc 11 §64/§65: bodega debe poder verificar los datos fiscales del cliente
 // sin salir del pedido, con un indicador claro de qué está completo y qué hay
@@ -53,14 +54,7 @@ export function FiscalCard({ customer }: { customer: FiscalCustomer }) {
       </div>
 
       <dl className="text-sm">
-        <Field
-          label="Nombre / Razón social"
-          value={
-            customer.commercial_name ??
-            customer.legal_name ??
-            `${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim()
-          }
-        />
+        <Field label="Nombre / Razón social" value={customerDisplayName(customer)} />
         <Field
           label="Identificación"
           value={

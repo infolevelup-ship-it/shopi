@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
 import { PRICE_LISTS } from "@/lib/ui/fiscal";
+import { customerDisplayName } from "@/lib/ui/format";
 
 // Fase 11 (doc 10 §14, doc 01 §32/§52-53). Alcance: lo que cada rol
 // realmente necesita (doc 05) — vendedora ve lo suyo, bodega ve operación,
@@ -115,9 +116,7 @@ export async function getReportsData(range: ReportRange): Promise<ReportsData | 
         const seller = Array.isArray(o.seller) ? o.seller[0] : o.seller;
         const customer = Array.isArray(o.customer) ? o.customer[0] : o.customer;
         const sellerName = seller?.name ?? "(sin vendedora)";
-        const customerName = customer
-          ? (customer.commercial_name ?? customer.legal_name ?? (`${customer.first_name ?? ""} ${customer.last_name ?? ""}`.trim() || "(sin nombre)"))
-          : "(sin cliente)";
+        const customerName = customer ? customerDisplayName(customer) : "(sin cliente)";
         sellerTotals.set(sellerName, (sellerTotals.get(sellerName) ?? 0) + Number(o.grand_total));
         customerTotals.set(customerName, (customerTotals.get(customerName) ?? 0) + Number(o.grand_total));
       }
