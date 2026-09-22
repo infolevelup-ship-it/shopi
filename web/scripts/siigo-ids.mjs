@@ -125,12 +125,13 @@ async function main() {
   const token = await autenticar();
   console.log("✔ Autenticación correcta.");
 
-  const [formasPago, impuestos, centrosCosto, usuarios, tiposDocumento] = await Promise.all([
+  const [formasPago, impuestos, centrosCosto, usuarios, tiposDocumento, bodegas] = await Promise.all([
     consultar(token, "/v1/payment-types?document_type=FV"),
     consultar(token, "/v1/taxes"),
     consultar(token, "/v1/cost-centers"),
     consultar(token, "/v1/users"),
     consultar(token, "/v1/document-types?type=FV"),
+    consultar(token, "/v1/warehouses"),
   ]);
 
   // ---------------------------------------------------------------- informe
@@ -169,6 +170,24 @@ async function main() {
         ? `\n  ✔ El id ${esperado} que usa la plataforma existe en la cuenta.`
         : `\n  ⚠ La plataforma tiene fijo el id ${esperado} y NO aparece arriba. Hay que corregirlo\n    en web/src/lib/siigo/client.ts (SIIGO_INVOICE_DOCUMENT_TYPE_ID).`,
     );
+  }
+
+  // Reportado por el equipo (2026-09-22): al facturar, Siigo mueve el
+  // inventario contra una bodega "sin asignar" en vez de la principal. La
+  // plataforma hoy NO manda ningún id de bodega en la factura — este informe
+  // es para decidir si hay que empezar a mandarlo, y con cuál id, antes de
+  // tocar el código: Siigo API rechaza la factura si se manda `warehouse` y
+  // el manejo de bodegas no está activo en la cuenta (Configuración > Más
+  // configuraciones > Inventario), así que hay que confirmar esto primero.
+  titulo("BODEGAS");
+  if (bodegas.error) console.log(`No se pudo consultar: ${bodegas.error}`);
+  else if (bodegas.datos.length === 0) {
+    console.log("  La cuenta no tiene bodegas configuradas — probablemente el manejo de");
+    console.log("  bodegas está desactivado. NO se debe mandar `warehouse` en la factura.");
+  } else {
+    for (const b of bodegas.datos)
+      console.log(`  ${String(b.id).padEnd(8)} ${b.name}${b.active === false ? "  (inactiva)" : ""}`);
+    console.log("\n  Copia el id de la bodega principal para configurar 'siigo_warehouse_id'.");
   }
 
   // -------------------------------------------------------------------- SQL

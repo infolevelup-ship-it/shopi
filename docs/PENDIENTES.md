@@ -70,6 +70,17 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
         con `invalid_total_payments` porque el total que calculaba quedaba muy por encima del de
         `payments`. Corregido en `siigoLineDiscount` (`web/src/lib/siigo/client.ts`): calcula el
         descuento en pesos cuando el documento es el real, en porcentaje cuando es el de pruebas.
+- [ ] **Bodega "sin asignar" al facturar** — reportado por el equipo (2026-09-22, Carlos/bodega):
+      en Siigo, la factura mueve el inventario contra una bodega "sin asignar" en vez de la
+      principal. La plataforma hoy NO manda ningún campo `warehouse` en la factura (nunca lo
+      mandó); Siigo sí lo soporta como campo opcional en `items[]` de `/v1/invoices`, pero **su
+      propia documentación advierte que rechaza la factura si se manda `warehouse` y la cuenta NO
+      tiene activo el manejo de bodegas** (Configuración > Más configuraciones > Inventario) — así
+      que no se puede simplemente agregarlo a ciegas sin arriesgar romper la facturación real que
+      ya funciona. `web/scripts/siigo-ids.mjs` ya se extendió para listar `/v1/warehouses` de la
+      cuenta real (sección "BODEGAS" del informe) — falta correrlo con las credenciales reales
+      para confirmar si el manejo de bodegas está activo y, si sí, cuál id es la bodega principal,
+      antes de tocar `buildSiigoInvoicePayload`.
 
 ## GHL (fase 9-10, sin empezar)
 
