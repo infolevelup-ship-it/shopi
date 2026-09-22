@@ -1105,6 +1105,20 @@ Sobre los precios (confirmado contra 100 productos de la cuenta real):
       su red bloquea `api.siigo.com`.
 - [ ] La forma exacta de `/v1/products` (paginación, `prices[].price_list[]`, `unit`) sigue sin
       verificarse contra la API real, como el resto del cliente de Siigo.
+- [ ] **`stock_cache` no se actualiza sola** (2026-09-22, reportado por el equipo: el inventario de
+      Siigo y el de la plataforma no coinciden). Hoy solo hay dos botones manuales — "Actualizar
+      inventario" en un pedido (`syncOrderProductStockAction`, solo esos productos) y "Sincronizar
+      catálogo" en Configuración (`syncProductCatalogAction`, todo el catálogo) — nada corre solo.
+      Mientras no se implemente, `stock_cache` es tan viejo como la última vez que alguien tocó uno
+      de los dos botones; si Siigo cambió el stock después, la plataforma se ve desactualizada hasta
+      el próximo clic. Dos rutas evaluadas para automatizarlo, ninguna implementada todavía:
+      - Cron (jalar más seguido): requiere confirmar antes los rate limits de la API de Siigo (línea
+        más arriba, "Rate limits de la API de Siigo" — sigue sin cerrar) para no saturarla trayendo
+        el catálogo completo cada pocos minutos.
+      - Webhook de Siigo (que avise Siigo, no que preguntemos): existe `POST /v1/webhooks` con
+        topics tipo `products.update`; falta confirmar el topic exacto de stock y qué trae el
+        payload (¿la cantidad nueva, o solo el id para volver a consultar?) contra la cuenta real
+        antes de construir el receptor.
 
 ## Clientes: importación desde Siigo y edición
 
