@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth";
+import { customerDisplayName } from "@/lib/ui/format";
 import type { Database } from "@/lib/supabase/database.types";
 
 type OrderStatus = Database["public"]["Enums"]["order_status"];
@@ -11,22 +12,6 @@ type OrderStatus = Database["public"]["Enums"]["order_status"];
 // un puntaje compuesto — doc 01 §58 es explícito: la fórmula de prioridad
 // "se definirá después de observar datos reales" y "nunca debe ser una caja
 // negra sin explicación". Cada ítem dice por qué está ahí.
-
-type CustomerRow = {
-  id: string;
-  commercial_name: string | null;
-  legal_name: string | null;
-  first_name: string | null;
-  last_name: string | null;
-};
-
-function displayName(c: CustomerRow): string {
-  return (
-    c.commercial_name ??
-    c.legal_name ??
-    (`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "(sin nombre)")
-  );
-}
 
 function formatMoney(value: number) {
   return value.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -199,7 +184,7 @@ export async function getSellerDashboard(): Promise<SellerDashboard | null> {
     if (!c) continue;
     priorities.push({
       kind: "AT_RISK",
-      customerName: displayName(c),
+      customerName: customerDisplayName(c),
       reason: `Fuera de ciclo hace ${m.days_since_last_order} días (compra cada ~${Math.round(m.avg_days_between_orders ?? 0)} días)`,
       link: `/customers/${m.customer_id}`,
     });
@@ -210,7 +195,7 @@ export async function getSellerDashboard(): Promise<SellerDashboard | null> {
     if (!c) continue;
     priorities.push({
       kind: "OPEN_QUOTE",
-      customerName: displayName(c),
+      customerName: customerDisplayName(c),
       reason: `Cotización enviada por ${formatMoney(q.grand_total)} sin respuesta`,
       link: `/quotes/${q.id}`,
     });
@@ -220,7 +205,7 @@ export async function getSellerDashboard(): Promise<SellerDashboard | null> {
     const c = Array.isArray(o.customer) ? o.customer[0] : o.customer;
     priorities.push({
       kind: "RETURNED_ORDER",
-      customerName: c ? displayName(c) : "",
+      customerName: c ? customerDisplayName(c) : "",
       reason: `Pedido ${o.order_number} devuelto — necesita corrección`,
       link: `/orders/${o.id}`,
     });
