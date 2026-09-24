@@ -141,7 +141,10 @@ export type SiigoInvoiceCreatePayload = {
   observations?: string;
   items: SiigoInvoiceItem[];
   payments: SiigoInvoicePayment[];
-  retentions?: { id: number }[];
+  // NO "retentions" a nivel de factura: confirmado contra la cuenta real
+  // (2026-09-24) que ese campo es solo para ReteICA/ReteIVA/Autorretención,
+  // no para Retefuente — la Retefuente va en `SiigoInvoiceItem.taxes[]`, ver
+  // el comentario en `buildSiigoInvoicePayload` (client.ts).
 };
 
 export type SiigoInvoice = {
