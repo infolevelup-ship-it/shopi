@@ -263,6 +263,11 @@ export async function syncProductCatalogAction(): Promise<CatalogSyncResult> {
       price_salon,
       stock_cache: p.available_quantity ?? null,
       stock_updated_at: new Date().toISOString(),
+      // Confirmado contra la cuenta real (2026-09-22): 18 de 1761 productos
+      // NO tienen control de inventario (tarjetas de regalo, fletes,
+      // descuentos, un curso) — sin este dato, facturar no puede saber en
+      // cuáles líneas es seguro mandar bodega y en cuáles Siigo la rechaza.
+      stock_control: p.stock_control ?? null,
       updated_at: new Date().toISOString(),
     };
   });

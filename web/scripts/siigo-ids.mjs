@@ -228,6 +228,16 @@ async function main() {
     );
   }
 
+  if (!bodegas.error && bodegas.datos.length > 0) {
+    const principal = bodegas.datos.find((b) => String(b.name).toUpperCase().includes("PRINCIPAL"));
+    lineas.push(
+      `-- REVISA ESTE: hay ${bodegas.datos.length} bodegas en la cuenta, esto asume que TODA venta\n` +
+        `-- sale de la misma. Si no, hay que decidir la regla (¿por canal? ¿por ciudad?) antes de\n` +
+        `-- confiar en este valor único. Si no se configura, la plataforma usa 107.\n` +
+        `insert into app_settings (key, value) values\n  ('siigo_warehouse_id', '${principal?.id ?? bodegas.datos[0].id}'::jsonb)\non conflict (key) do update set value = excluded.value;`,
+    );
+  }
+
   console.log("\n" + lineas.join("\n\n") + "\n");
 
   titulo("FALTA POR HACER A MANO");

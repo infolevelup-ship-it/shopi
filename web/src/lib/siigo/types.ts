@@ -26,6 +26,14 @@ export type SiigoProduct = {
   active?: boolean;
   /** Confirmado contra la cuenta real: cuando es true, `prices[].price_list[].value` YA trae el IVA sumado. */
   tax_included?: boolean;
+  /**
+   * Confirmado contra la cuenta real (2026-09-22): 18 de 1761 productos la
+   * tienen en `false` (tarjetas de regalo, fletes, descuentos, un curso) —
+   * Siigo rechaza la factura completa si se manda `warehouse` en una línea
+   * de un producto sin control de inventario. Por eso hay que guardarlo por
+   * producto en vez de asumir que todos lo tienen.
+   */
+  stock_control?: boolean;
   available_quantity?: number;
   warehouses?: SiigoWarehouseStock[];
   taxes?: { id: number; name: string; type: string; percentage: number }[];
@@ -101,6 +109,14 @@ export type SiigoInvoiceItem = {
   price: number;
   discount?: number;
   taxes?: { id: number }[];
+  /**
+   * Confirmado contra la referencia pública: al escribir es un número plano
+   * (a diferencia de la respuesta al leer, que trae `{id, name}` — misma
+   * asimetría lectura/escritura que `id_type` en clientes). Solo se manda
+   * en líneas de productos con `stock_control: true`; si se manda en un
+   * producto sin control de inventario, Siigo rechaza la factura completa.
+   */
+  warehouse?: number;
 };
 
 export type SiigoInvoicePayment = {

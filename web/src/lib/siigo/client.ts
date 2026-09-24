@@ -372,6 +372,15 @@ export type SiigoInvoiceOrderItemInput = {
   // distinto al nuestro, rechazando la factura con "invalid_total_payments".
   discountPercent: number;
   siigoTaxId: number | null; // null = sin IVA en esta línea, se omite `taxes`
+  /**
+   * Bodega de la que Siigo descuenta el inventario de esta línea. Solo se
+   * manda si el producto tiene `stock_control: true` en Siigo — el llamador
+   * decide eso (necesita el dato de `products`, esta función no toca la
+   * base). Sin esto, Siigo descontaba de una bodega fantasma ("Sin
+   * asignar", id -1) en vez de la principal (confirmado contra la cuenta
+   * real 2026-09-22: quedó en -4 unidades sin que nadie lo notara).
+   */
+  warehouseId: number | null;
 };
 
 export type SiigoInvoiceOrderInput = {
@@ -438,6 +447,7 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
       price: item.unitPrice,
       discount: siigoLineDiscount(item, input.documentTypeId),
       taxes: item.siigoTaxId ? [{ id: item.siigoTaxId }] : undefined,
+      warehouse: item.warehouseId ?? undefined,
     })),
     payments: [
       {

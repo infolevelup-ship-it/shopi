@@ -24,6 +24,7 @@ import {
 // con "no se facturó" (doc 06 §17).
 
 const DEFAULT_COST_CENTER = 86; // doc 06 §22: comportamiento real actual de la cuenta, "PUBLICO"
+const DEFAULT_WAREHOUSE_ID = 107; // confirmado contra la cuenta real (2026-09-22): "Bodega Principal"
 
 class InvoiceValidationError extends Error {}
 
@@ -136,7 +137,9 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
 
     const { data: items } = await supabase
       .from("order_items")
-      .select("product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_percent, tax_percent, siigo_product_id")
+      .select(
+        "product_code_snapshot, product_name_snapshot, quantity, unit_price, discount_percent, tax_percent, siigo_product_id, product:products(stock_control)",
+      )
       .eq("order_id", orderId);
 
     if (!items || items.length === 0) {
@@ -145,6 +148,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
 
     const settings = await readAppSettings(serviceClient, [
       "siigo_cost_center",
+      "siigo_warehouse_id",
       "siigo_payment_types",
       "siigo_tax_ids",
       "siigo_seller_map",
@@ -153,6 +157,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
     ]);
     const integraciones = parseIntegrationSettings(settings);
     const costCenter = (settings.get("siigo_cost_center") as number | undefined) ?? DEFAULT_COST_CENTER;
+    const warehouseId = (settings.get("siigo_warehouse_id") as number | undefined) ?? DEFAULT_WAREHOUSE_ID;
     const paymentTypes = (settings.get("siigo_payment_types") as Record<string, number> | undefined) ?? {};
     const taxIds = (settings.get("siigo_tax_ids") as Record<string, number> | undefined) ?? {};
     const sellerMap = (settings.get("siigo_seller_map") as Record<string, number> | undefined) ?? {};
@@ -204,6 +209,13 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
         missingTaxIds.add(percentKey);
         continue;
       }
+      // Nunca a ciegas: Siigo rechaza la factura completa si se manda
+      // `warehouse` en una línea de un producto sin control de inventario
+      // (tarjetas de regalo, fletes, descuentos — 18 de 1761 productos en
+      // la cuenta real). Sin sincronizar el catálogo, stock_control es
+      // null, y por eso no se manda bodega — mejor omitirla que arriesgar
+      // tumbar la factura entera por una sola línea.
+      const producto = Array.isArray(item.product) ? item.product[0] : item.product;
       itemInputs.push({
         code: item.product_code_snapshot,
         name: item.product_name_snapshot,
@@ -211,6 +223,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
         unitPrice: Number(item.unit_price),
         discountPercent: Number(item.discount_percent),
         siigoTaxId: taxId,
+        warehouseId: producto?.stock_control === true ? warehouseId : null,
       });
     }
 

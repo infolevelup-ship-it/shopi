@@ -70,17 +70,33 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
         con `invalid_total_payments` porque el total que calculaba quedaba muy por encima del de
         `payments`. Corregido en `siigoLineDiscount` (`web/src/lib/siigo/client.ts`): calcula el
         descuento en pesos cuando el documento es el real, en porcentaje cuando es el de pruebas.
-- [ ] **Bodega "sin asignar" al facturar** — reportado por el equipo (2026-09-22, Carlos/bodega):
-      en Siigo, la factura mueve el inventario contra una bodega "sin asignar" en vez de la
-      principal. La plataforma hoy NO manda ningún campo `warehouse` en la factura (nunca lo
-      mandó); Siigo sí lo soporta como campo opcional en `items[]` de `/v1/invoices`, pero **su
-      propia documentación advierte que rechaza la factura si se manda `warehouse` y la cuenta NO
-      tiene activo el manejo de bodegas** (Configuración > Más configuraciones > Inventario) — así
-      que no se puede simplemente agregarlo a ciegas sin arriesgar romper la facturación real que
-      ya funciona. `web/scripts/siigo-ids.mjs` ya se extendió para listar `/v1/warehouses` de la
-      cuenta real (sección "BODEGAS" del informe) — falta correrlo con las credenciales reales
-      para confirmar si el manejo de bodegas está activo y, si sí, cuál id es la bodega principal,
-      antes de tocar `buildSiigoInvoicePayload`.
+- [x] **Bodega "sin asignar" al facturar** — reportado por el equipo (2026-09-22, Carlos/bodega).
+      Confirmado contra la cuenta real (vía las credenciales de Siigo que ya usa el escenario de
+      Make "WOW - Buscar Cliente Siigo" — ver nota de seguridad abajo, están en texto plano):
+      - La cuenta SÍ tiene manejo de bodegas activo — 17 bodegas reales (Bodega Principal, Punto
+        POS, Cali, Medellín, Costa Caribe, etc.). **"Bodega Principal" es el id 107.**
+      - Un producto real (OLAPLEX0235) mostró la prueba directa del bug: `-4` unidades en la
+        bodega fantasma "Sin asignar" (id `-1`) mientras "Bodega Principal" nunca se tocó — la
+        plataforma nunca mandó `warehouse` en la factura, así que Siigo la descontaba de ahí.
+      - **18 de 1761 productos tienen `stock_control: false`** (tarjetas de regalo, fletes,
+        descuentos, un curso) — Siigo rechaza la factura completa si se manda `warehouse` en una
+        línea de esos. Por eso se agregó `products.stock_control` (migración 0038), poblado al
+        sincronizar catálogo, y `invoiceOrderAction` solo manda bodega en las líneas donde ese
+        campo es `true`.
+      - `app_settings.siigo_warehouse_id` = 107 (default en código si no está configurado). Asume
+        que TODA venta sale de la misma bodega — no hay regla por canal/ciudad todavía, aunque la
+        cuenta tiene bodegas por ciudad (Cali, Medellín...). Si eso importa, es una decisión de
+        negocio pendiente, no algo que se decidió aquí.
+      - Falta: correr `syncProductCatalogAction` ("Sincronizar catálogo" en Configuración) para
+        que `stock_control` se llene en los productos existentes — hasta entonces queda `null` y
+        ninguna línea manda bodega (seguro, pero no arregla nada hasta que se corra).
+
+  **⚠ Nota de seguridad, aparte del bug de bodega**: el escenario de Make "WOW - Buscar Cliente
+  Siigo" (y "WOW - Aprobar y Facturar (FIX)") tienen el `username`/`access_key` real de Siigo
+  escritos en texto plano dentro del módulo HTTP, visibles para cualquiera con acceso a esos
+  escenarios en Make. Vale la pena moverlos a una conexión/variable de entorno de Make en vez de
+  dejarlos ahí — no se tocó en esta sesión porque es una decisión operativa, no algo que se
+  arregla solo.
 
 ## GHL (fase 9-10, sin empezar)
 

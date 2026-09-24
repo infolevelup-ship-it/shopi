@@ -1473,6 +1473,7 @@ export type Database = {
           price_salon: number | null
           siigo_product_id: string | null
           stock_cache: number | null
+          stock_control: boolean | null
           stock_updated_at: string | null
           tax_id: string | null
           tax_percent: number | null
@@ -1492,6 +1493,7 @@ export type Database = {
           price_salon?: number | null
           siigo_product_id?: string | null
           stock_cache?: number | null
+          stock_control?: boolean | null
           stock_updated_at?: string | null
           tax_id?: string | null
           tax_percent?: number | null
@@ -1511,6 +1513,7 @@ export type Database = {
           price_salon?: number | null
           siigo_product_id?: string | null
           stock_cache?: number | null
+          stock_control?: boolean | null
           stock_updated_at?: string | null
           tax_id?: string | null
           tax_percent?: number | null
