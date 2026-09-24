@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentProfile } from "@/lib/auth";
 import { getSellerDashboard, getWarehouseDashboard } from "@/lib/actions/dashboard";
 import { getReportsData } from "@/lib/actions/reports";
+import { getSeguimientosPendientesCount } from "@/lib/actions/seguimientos";
 import { DashboardPanel } from "./dashboard-panel";
 import { WarehousePanel } from "./warehouse-panel";
 import { StatTile } from "@/components/ui";
@@ -26,9 +27,10 @@ export default async function HomePage() {
 
   // Supervisor/admin (doc 11 §48): detectar cuellos de botella, no llenar de
   // gráficas. El detalle completo sigue viviendo en /reports.
-  const [ops, reports] = await Promise.all([
+  const [ops, reports, seguimientosPendientes] = await Promise.all([
     getWarehouseDashboard(),
     getReportsData("month"),
+    getSeguimientosPendientesCount(),
   ]);
 
   return (
@@ -86,6 +88,15 @@ export default async function HomePage() {
           label="errores de facturación"
           href="/orders"
           tone={(reports?.operations?.invoiceErrorsInRange ?? 0) > 0 ? "danger" : undefined}
+        />
+      </div>
+
+      <h2 className="mt-8 mb-3 text-base font-semibold text-text">Equipo comercial</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          value={seguimientosPendientes ?? 0}
+          label="seguimientos pendientes"
+          href="/seguimientos"
         />
       </div>
 

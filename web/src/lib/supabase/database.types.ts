@@ -2728,6 +2728,72 @@ export type Database = {
       }
       next_order_number: { Args: never; Returns: string }
       next_quote_number: { Args: never; Returns: string }
+      reassign_customer: {
+        Args: {
+          p_customer_id: string
+          p_new_seller_id: string
+          p_reason?: string
+        }
+        Returns: {
+          address: string | null
+          birthday: string | null
+          branch_code: string | null
+          channel: string | null
+          check_digit: string | null
+          city: string | null
+          city_code: string | null
+          commercial_name: string | null
+          contact_email: string | null
+          contact_first_name: string | null
+          contact_indicative: string | null
+          contact_last_name: string | null
+          contact_phone: string | null
+          created_at: string
+          credit_limit: number | null
+          customer_type: string
+          customer_type_classification: string | null
+          department: string | null
+          document_number: string
+          document_number_normalized: string
+          document_type: string
+          email: string | null
+          first_name: string | null
+          fiscal_responsibilities: string[] | null
+          fiscal_responsibility: string | null
+          ghl_contact_id: string | null
+          ghl_last_synced_at: string | null
+          ghl_sync_error: string | null
+          ghl_sync_status: Database["public"]["Enums"]["ghl_sync_status"] | null
+          id: string
+          is_duplicate_candidate: boolean
+          last_contact_at: string | null
+          last_name: string | null
+          last_purchase_at: string | null
+          legal_name: string | null
+          merged_into_customer_id: string | null
+          phone: string | null
+          phone_extension: string | null
+          phone_indicative: string | null
+          postal_code: string | null
+          purchase_type: string | null
+          responsible_user_id: string | null
+          secondary_phone: string | null
+          siigo_branch_office: number | null
+          siigo_customer_id: string | null
+          source: string | null
+          state_code: string | null
+          status: Database["public"]["Enums"]["customer_status"]
+          updated_at: string
+          vat_responsible: boolean | null
+          website_social: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "customers"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       receipt_path_order_id: { Args: { p_name: string }; Returns: string }
       register_customer_document: {
         Args: {

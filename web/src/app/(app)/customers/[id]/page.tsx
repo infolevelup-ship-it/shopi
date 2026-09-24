@@ -8,6 +8,8 @@ import { FollowUpsPanel } from "./followups-panel";
 import { DocumentsPanel } from "./documents-panel";
 import { listCustomerDocuments } from "@/lib/actions/customer-documents";
 import { ClaimCustomerButton } from "./claim-button";
+import { ReassignCustomerSelect } from "./reassign-customer-select";
+import { listActiveSellersAction } from "@/lib/actions/customers";
 import { Callout, PageHeader, StatTile, StatusBadge } from "@/components/ui";
 import { customerDisplayName, formatDate, formatDateTime, formatMoney } from "@/lib/ui/format";
 import {
@@ -78,6 +80,7 @@ export default async function CustomerDetailPage({
     { data: orders },
     { data: quotes },
     documents,
+    sellers,
   ] = await Promise.all([
     supabase
       .from("customer_activities")
@@ -111,6 +114,7 @@ export default async function CustomerDetailPage({
       .order("created_at", { ascending: false })
       .limit(10),
     listCustomerDocuments(id),
+    profile?.role === "ADMIN" ? listActiveSellersAction() : Promise.resolve([]),
   ]);
 
   const responsible = Array.isArray(customer.responsible)
@@ -189,6 +193,20 @@ export default async function CustomerDetailPage({
               <ClaimCustomerButton customerId={customer.id} />
             </div>
           </Callout>
+        </div>
+      )}
+
+      {/* Reasignar es decisión de admin (doc PENDIENTES §Fase 13) — la regla
+          de quién puede y hacia quién vive en reassign_customer, esto solo
+          la expone. */}
+      {profile?.role === "ADMIN" && (
+        <div className="card card-pad mb-5">
+          <p className="mb-2 text-sm font-medium text-text">Reasignar a otra vendedora</p>
+          <ReassignCustomerSelect
+            customerId={customer.id}
+            currentSellerId={customer.responsible_user_id}
+            sellers={sellers}
+          />
         </div>
       )}
 

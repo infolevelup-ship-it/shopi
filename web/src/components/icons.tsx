@@ -16,7 +16,8 @@ export type IconName =
   | "productos"
   | "bodega"
   | "reportes"
-  | "configuracion";
+  | "configuracion"
+  | "seguimientos";
 
 const TRAZOS: Record<IconName, React.ReactNode> = {
   // casa
@@ -85,6 +86,13 @@ const TRAZOS: Record<IconName, React.ReactNode> = {
       <path d="M6.5 21v-7" />
       <path d="M12 21V6" />
       <path d="M17.5 21v-10" />
+    </>
+  ),
+  // reloj
+  seguimientos: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
     </>
   ),
   // engranaje simplificado

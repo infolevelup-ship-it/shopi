@@ -41,6 +41,12 @@ export const NAV_GROUPS: NavGroup[] = [
         roles: ["SELLER", "SUPERVISOR", "ADMIN"],
       },
       { href: "/orders", label: "Pedidos", icon: "pedidos", match: "/orders" },
+      {
+        href: "/seguimientos",
+        label: "Seguimientos",
+        icon: "seguimientos",
+        roles: ["SUPERVISOR", "ADMIN"],
+      },
     ],
   },
   {

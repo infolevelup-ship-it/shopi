@@ -447,3 +447,37 @@ export async function claimCustomerAction(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+
+export type SellerOption = { id: string; name: string };
+
+/** Para el selector de reasignar cliente — solo ADMIN lo necesita, pero listar vendedoras activas no es sensible. */
+export async function listActiveSellersAction(): Promise<SellerOption[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users")
+    .select("id, name")
+    .eq("role", "SELLER")
+    .eq("active", true)
+    .order("name");
+  return data ?? [];
+}
+
+/**
+ * Reasignar cliente (mejora 2026-09-24, doc PENDIENTES §Fase 13): la regla de
+ * quién puede reasignar y hacia quién vive en `reassign_customer` — aquí solo
+ * se traduce el error de Postgres a algo legible en pantalla.
+ */
+export async function reassignCustomerAction(
+  customerId: string,
+  newSellerId: string,
+  reason?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reassign_customer", {
+    p_customer_id: customerId,
+    p_new_seller_id: newSellerId,
+    p_reason: reason || undefined,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
