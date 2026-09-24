@@ -52,8 +52,10 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
 - [ ] Regla completa de `vat_responsible` (solo se vio un ejemplo real, `false`; falta cuándo es `true`).
 - [ ] Catálogo completo de responsabilidades fiscales (solo se vio un ejemplo real, `R-99-PN`).
 - [ ] Campos fiscales estrictamente obligatorios vs. opcionales.
-- [ ] Retención al 10%: el formulario la ofrece pero no se encontró en el catálogo real de Siigo —
-      **riesgo real**, revisar antes de construir el `InvoiceService` (Fase 7).
+- [x] Retención al 10%: **sí existe** en el catálogo real (id 2953, confirmado 2026-09-24) — la nota
+      de que "no se encontró" estaba mal. El formulario de pedidos sigue sin ofrecerla en el
+      selector, pero eso es una decisión de negocio (Fase 5), no falta de dato — no se tocó el
+      selector ni el mapa de `SIIGO_RETENTION_ID_BY_PERCENT` sin que alguien decida reabrir eso.
 - [ ] Rate limits de la API de Siigo.
 - [x] **Formato del descuento de línea (`items[].discount`) según el comprobante** — confirmado
       contra la cuenta real (2026-09-21, pedido WOW-P-0000061, primera factura contra el documento
@@ -97,6 +99,21 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
   escenarios en Make. Vale la pena moverlos a una conexión/variable de entorno de Make en vez de
   dejarlos ahí — no se tocó en esta sesión porque es una decisión operativa, no algo que se
   arregla solo.
+
+- [x] **`retentions[0].id` inválido al facturar con retención** — reportado por el equipo
+      (2026-09-24, pedido WOW-P-0000088, bloqueado 40+ min con "Error creando factura en Siigo").
+      Causa real, confirmada contra la cuenta: el campo `retentions` a nivel de factura en la API
+      de Siigo es solo para ReteICA/ReteIVA/Autorretención (así lo dice su propia documentación) —
+      **no** para Retefuente, que es lo que usa `SIIGO_RETENTION_ID_BY_PERCENT` (confirmado
+      `type: "Retefuente"` contra `/v1/taxes` real). Por eso el mismo código de error
+      (`invalid_array` en `retentions[0].id`) se veía antes con el documento de pruebas — parecía
+      un problema de ESE documento, pero era el campo en sí, y hoy fue la primera factura real con
+      retención contra el documento electrónico. La Retefuente va dentro de `items[].taxes[]`,
+      junto al IVA de cada línea — así lo hacía `formulario/WOW_Pedidos_B2B_v3.html` (comentario
+      literal: "retención como impuesto de la línea"), el formulario que facturaba contra esta
+      misma cuenta antes de esta app. Corregido en `buildSiigoInvoicePayload`
+      (`web/src/lib/siigo/client.ts`): ya no manda `retentions`, mete el id de retención en cada
+      línea junto al IVA.
 
 ## GHL (fase 9-10, sin empezar)
 

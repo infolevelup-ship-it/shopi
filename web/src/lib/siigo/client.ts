@@ -334,10 +334,13 @@ export function buildSiigoCustomerPayload(customer: WowCustomerForSiigo): SiigoC
 export const SIIGO_INVOICE_DOCUMENT_TYPE_ID = 34963;
 
 // Validado (doc 06 §14): catálogo real de Retefuente de la cuenta de WOW.
-// 10% deliberadamente NO está — no se encontró en el catálogo real, y el
-// formulario de pedidos ya la excluye del selector desde la Fase 5. Si un
-// pedido trae un % sin mapeo aquí, facturar debe fallar alto y claro, nunca
-// inventar un id.
+// 10% sigue sin mapear aquí a propósito, aunque SÍ existe en el catálogo
+// real (id 2953, confirmado 2026-09-24 — la nota anterior de que "no se
+// encontró" ya no es cierta). El formulario de pedidos la excluye del
+// selector desde la Fase 5 por una decisión de negocio, no por falta de id;
+// agregarla aquí sin decidir primero si se vuelve a ofrecer sería adelantarse
+// a esa decisión. Si un pedido trae un % sin mapeo aquí, facturar debe
+// fallar alto y claro, nunca inventar un id.
 const SIIGO_RETENTION_ID_BY_PERCENT: Record<string, number> = {
   "1": 2970,
   "2": 2969,
@@ -431,6 +434,25 @@ function siigoLineDiscount(item: SiigoInvoiceOrderItemInput, documentTypeId: num
   return Math.round(lineSubtotal * (item.discountPercent / 100) * 100) / 100;
 }
 
+// Confirmado contra la cuenta real (2026-09-24, pedido WOW-P-0000088): el
+// campo `retentions` a nivel de factura NO es para Retefuente — la propia
+// documentación de Siigo lo limita a ReteICA/ReteIVA/Autorretención. Mandar
+// ahí un id de tipo Retefuente (como los de `SIIGO_RETENTION_ID_BY_PERCENT`,
+// confirmados como `type: "Retefuente"` contra /v1/taxes) lo rechaza con
+// invalid_array en retentions[0].id, sin importar cuál se mande — mismo
+// código de error que el documento de pruebas al no soportar retención en
+// absoluto, lo que hizo parecer que era un problema de esa cuenta y no del
+// campo. La Retefuente va dentro de `items[].taxes[]`, junto al IVA de cada
+// línea — así lo hacía `formulario/WOW_Pedidos_B2B_v3.html` ("retención como
+// impuesto de la línea", nunca un campo `retentions` aparte), el formulario
+// que facturaba contra esta misma cuenta antes de esta app.
+function siigoLineTaxes(item: SiigoInvoiceOrderItemInput, retentionId: number | null) {
+  const taxes: { id: number }[] = [];
+  if (item.siigoTaxId) taxes.push({ id: item.siigoTaxId });
+  if (retentionId) taxes.push({ id: retentionId });
+  return taxes.length > 0 ? taxes : undefined;
+}
+
 export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoInvoiceCreatePayload {
   const retentionId = getSiigoRetentionId(input.retentionPercent);
 
@@ -446,7 +468,7 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
       quantity: item.quantity,
       price: item.unitPrice,
       discount: siigoLineDiscount(item, input.documentTypeId),
-      taxes: item.siigoTaxId ? [{ id: item.siigoTaxId }] : undefined,
+      taxes: siigoLineTaxes(item, retentionId),
       warehouse: item.warehouseId ?? undefined,
     })),
     payments: [
@@ -461,7 +483,6 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
   };
 
   if (input.sellerSiigoId) payload.seller = input.sellerSiigoId;
-  if (retentionId) payload.retentions = [{ id: retentionId }];
 
   return payload;
 }
