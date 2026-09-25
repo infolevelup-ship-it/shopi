@@ -135,7 +135,17 @@ export type SiigoInvoiceCreatePayload = {
   // customer.identification es obligatorio". La respuesta al LEER una
   // factura sí trae ambos (ver SiigoInvoice más abajo) — la misma clase de
   // asimetría lectura/escritura que id_type en customers.
-  customer: { identification: string };
+  //
+  // `branch_office` (confirmado 2026-09-25, pedido WOW-P-0000094): si se
+  // omite, Siigo busca en la sucursal 0. Un mismo `identification` puede
+  // tener varios terceros en distintas sucursales (confirmado: un cliente
+  // real con 3 registros duplicados en Siigo — sucursales 1, 4 y 8, ninguna
+  // en la 0) — sin este campo, Siigo no encuentra ninguna y responde
+  // "invalid_reference: The customer doesn't exist", aunque el cliente sí
+  // exista y esté sincronizado. Nunca inventar el número: si no se conoce,
+  // se omite y Siigo asume 0 por su cuenta — mejor eso que mandar el
+  // incorrecto.
+  customer: { identification: string; branch_office?: number };
   cost_center?: number;
   seller?: number;
   observations?: string;

@@ -121,7 +121,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
     // hace falta dejar rastro de una llamada que nunca salió.
     const { data: customer } = await supabase
       .from("customers")
-      .select("siigo_customer_id, document_number")
+      .select("siigo_customer_id, document_number, siigo_branch_office")
       .eq("id", claimed.customer_id)
       .maybeSingle();
     if (!customer?.siigo_customer_id) {
@@ -254,6 +254,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
       grandTotal: Number(claimed.grand_total),
       retentionPercent: retentionPercentForSiigo,
       customerIdentification: customer.document_number,
+      customerBranchOffice: customer.siigo_branch_office,
       costCenter,
       documentTypeId: integraciones.invoiceDocumentId,
       paymentTypeId,

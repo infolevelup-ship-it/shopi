@@ -115,6 +115,30 @@ Reales, no supuestos — 4 de 5 ya se cerraron (ver doc 06 §22), estos siguen a
       (`web/src/lib/siigo/client.ts`): ya no manda `retentions`, mete el id de retención en cada
       línea junto al IVA.
 
+- [x] **`branch_office` faltante al facturar → "The customer doesn't exist"** — reportado por el
+      equipo (2026-09-25, WOW-P-0000094, cliente SINDY CAROLINA SALAMANCA ROMERO, CC 1032357871).
+      La factura mandaba `customer: {identification}` sin `branch_office`; Siigo asume sucursal 0
+      cuando se omite. Confirmado contra la cuenta real: este cliente tiene **3 terceros
+      duplicados en Siigo con la misma identificación**, en las sucursales 1, 4 y 8 — ninguno en
+      la 0 — así que la búsqueda por defecto no encontraba nada y Siigo respondía
+      "invalid_reference: the customer doesn't exist" aunque el cliente sí existiera y estuviera
+      "Sincronizado" en la plataforma. Corregido en `buildSiigoInvoicePayload`: ahora manda
+      `customer.branch_office` cuando lo conocemos (`customers.siigo_branch_office`).
+      - [ ] **Pendiente real, no resuelto todavía**: `customers.siigo_branch_office` está en
+        `null` en **19.243 de 19.293 clientes ya sincronizados con Siigo** (99.7%) — solo los
+        vinculados por `syncCustomerToSiigoAction` (Fase 7 en adelante) lo guardan; la importación
+        masiva original nunca lo capturó. Mientras esté en `null`, el código omite el campo y
+        Siigo asume sucursal 0 — funciona para la mayoría (probablemente sí están en la 0), pero
+        para cualquier cliente en otra sucursal (como este, o cualquiera con terceros duplicados)
+        vuelve a fallar igual hasta que se le corrija el dato a mano, uno por uno, como se hizo
+        aquí. Rellenar los 19.243 de una sola vez significa consultar `/v1/customers` por cada
+        uno contra la cuenta real — no se intentó en esta sesión: son miles de llamadas y los
+        rate limits de la API de Siigo siguen sin confirmar (línea ya abierta más arriba).
+      - [ ] Los 3 terceros duplicados de este cliente en Siigo (sucursales 1, 4 y 8) no se
+        limpiaron — se corrigió solo cuál referencia el sistema, no el duplicado en sí. Esa
+        limpieza es una decisión de negocio (¿cuál conservar?, ¿fusionar histórico?), no algo
+        para decidir a ciegas desde código.
+
 ## GHL (fase 9-10, sin empezar)
 
 - [ ] Estrategia exacta de sincronización.
