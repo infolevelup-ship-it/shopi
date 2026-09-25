@@ -392,6 +392,8 @@ export type SiigoInvoiceOrderInput = {
   retentionPercent: number;
   /** El documento del cliente (NIT/CC) — Siigo referencia así al cliente en una factura, no por su id interno. */
   customerIdentification: string;
+  /** Sucursal del tercero en Siigo. `null`/`undefined` = no se conoce, se omite y Siigo asume 0. */
+  customerBranchOffice?: number | null;
   costCenter: number;
   /** Tipo de documento a emitir. Configurable para poder probar contra uno no electrónico. */
   documentTypeId: number;
@@ -459,7 +461,10 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
   const payload: SiigoInvoiceCreatePayload = {
     document: { id: input.documentTypeId },
     date: new Date().toISOString().slice(0, 10),
-    customer: { identification: input.customerIdentification },
+    customer: {
+      identification: input.customerIdentification,
+      ...(input.customerBranchOffice != null ? { branch_office: input.customerBranchOffice } : {}),
+    },
     cost_center: input.costCenter,
     observations: `Pedido WOW ${input.orderNumber}`,
     items: input.items.map((item) => ({
