@@ -9,10 +9,12 @@ export type DaneLocation = {
   department: string;
 };
 
-// El catálogo completo son ~140 filas: se trae entero una vez en el servidor
-// y el formulario filtra ciudades por departamento en el navegador. Pedir las
-// ciudades al servidor cada vez que cambia el departamento sería una llamada
-// de red por cada clic, sobre un catálogo que cabe en un par de kilobytes.
+// El catálogo completo son los ~1123 municipios de Colombia (DIVIPOLA,
+// migración 0041) — se trae entero una vez en el servidor y el formulario
+// filtra ciudades por departamento en el navegador. Pedir las ciudades al
+// servidor cada vez que cambia el departamento sería una llamada de red por
+// cada clic, sobre un catálogo que de todos modos cabe en unos pocos
+// cientos de kilobytes.
 export async function listDaneLocations(): Promise<DaneLocation[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
