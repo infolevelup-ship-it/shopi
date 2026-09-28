@@ -375,6 +375,8 @@ export type SiigoInvoiceOrderItemInput = {
   // distinto al nuestro, rechazando la factura con "invalid_total_payments".
   discountPercent: number;
   siigoTaxId: number | null; // null = sin IVA en esta línea, se omite `taxes`
+  /** El % de IVA que representa `siigoTaxId` — hace falta el número, no solo el id, para poder calcular el total del pago (ver `computeSiigoInvoiceTotal`). */
+  taxPercent: number;
   /**
    * Bodega de la que Siigo descuenta el inventario de esta línea. Solo se
    * manda si el producto tiene `stock_control: true` en Siigo — el llamador
@@ -388,7 +390,6 @@ export type SiigoInvoiceOrderItemInput = {
 
 export type SiigoInvoiceOrderInput = {
   orderNumber: string;
-  grandTotal: number;
   retentionPercent: number;
   /** El documento del cliente (NIT/CC) — Siigo referencia así al cliente en una factura, no por su id interno. */
   customerIdentification: string;
@@ -429,11 +430,59 @@ function addDays(date: Date, days: number) {
 //     línea de más de un millón de pesos — casi cero — y Siigo rechaza la
 //     factura con invalid_total_payments porque el total que calcula queda
 //     muy por encima de lo que se manda en `payments`.
+// El descuento en pesos de la línea, sin importar en qué formato se lo
+// mandemos a Siigo (pesos o porcentaje crudo, ver `siigoLineDiscount`
+// abajo): en los dos casos Siigo termina aplicando este mismo peso real,
+// así que es la cifra que hay que usar para calcular el total esperado
+// del pago (`computeSiigoInvoiceTotal`).
+function siigoLineDiscountPesos(item: SiigoInvoiceOrderItemInput): number {
+  if (!item.discountPercent) return 0;
+  const lineSubtotal = item.unitPrice * item.quantity;
+  return Math.round(lineSubtotal * (item.discountPercent / 100) * 100) / 100;
+}
+
 function siigoLineDiscount(item: SiigoInvoiceOrderItemInput, documentTypeId: number): number | undefined {
   if (!item.discountPercent) return undefined;
   if (documentTypeId !== SIIGO_INVOICE_DOCUMENT_TYPE_ID) return item.discountPercent;
+  return siigoLineDiscountPesos(item);
+}
+
+// Confirmado contra la cuenta real (2026-09-28, pedido WOW-P-0000103):
+// Siigo rechazó con `invalid_total_payments` un pedido cuyo total nosotros
+// calculábamos en $2.290.580,04 — Siigo decía que el suyo daba $2.290.580,05.
+// La diferencia de 1 centavo no era un error de cálculo nuestro (el total
+// guardado en `orders.grand_total` usa `numeric` de Postgres, aritmética
+// decimal exacta); es que Siigo recalcula el total de la factura a partir de
+// las mismas líneas que le mandamos, con redondeo de punto flotante estándar
+// línea por línea — y ese redondeo, en algunas combinaciones de precio/%
+// descuento/% IVA, cae en un centavo distinto al de la aritmética decimal
+// exacta. Reproducido exacto con este mismo cálculo en JS (no en SQL).
+//
+// La única forma de que `payments[].value` cuadre siempre con lo que Siigo
+// va a calcular es no mandarle el total ya redondeado por Postgres, sino
+// calcularlo aquí con la misma aritmética línea por línea que se usa para
+// armar `items[]` — para que ambos números salgan del mismo lado del
+// redondeo, sin importar si coincide con el total "exacto" que ve el resto
+// de la app.
+function siigoLineNet(item: SiigoInvoiceOrderItemInput): number {
   const lineSubtotal = item.unitPrice * item.quantity;
-  return Math.round(lineSubtotal * (item.discountPercent / 100) * 100) / 100;
+  return lineSubtotal - siigoLineDiscountPesos(item);
+}
+
+function siigoLineTax(item: SiigoInvoiceOrderItemInput): number {
+  if (!item.siigoTaxId) return 0;
+  return Math.round(siigoLineNet(item) * (item.taxPercent / 100) * 100) / 100;
+}
+
+function computeSiigoInvoiceTotal(items: SiigoInvoiceOrderItemInput[], retentionPercent: number): number {
+  let netTotal = 0;
+  let taxTotal = 0;
+  for (const item of items) {
+    netTotal += siigoLineNet(item);
+    taxTotal += siigoLineTax(item);
+  }
+  const retentionTotal = retentionPercent ? Math.round(netTotal * (retentionPercent / 100) * 100) / 100 : 0;
+  return Math.round((netTotal + taxTotal - retentionTotal) * 100) / 100;
 }
 
 // Confirmado contra la cuenta real (2026-09-24, pedido WOW-P-0000088): el
@@ -479,7 +528,7 @@ export function buildSiigoInvoicePayload(input: SiigoInvoiceOrderInput): SiigoIn
     payments: [
       {
         id: input.paymentTypeId,
-        value: input.grandTotal,
+        value: computeSiigoInvoiceTotal(input.items, input.retentionPercent),
         ...(input.creditDays
           ? { due_date: addDays(new Date(), input.creditDays).toISOString().slice(0, 10) }
           : {}),

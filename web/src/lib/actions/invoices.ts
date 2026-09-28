@@ -223,6 +223,7 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
         unitPrice: Number(item.unit_price),
         discountPercent: Number(item.discount_percent),
         siigoTaxId: taxId,
+        taxPercent: Number(item.tax_percent),
         warehouseId: producto?.stock_control === true ? warehouseId : null,
       });
     }
@@ -251,7 +252,6 @@ export async function invoiceOrderAction(orderId: string): Promise<InvoiceAction
 
     const payload = buildSiigoInvoicePayload({
       orderNumber: claimed.order_number as string,
-      grandTotal: Number(claimed.grand_total),
       retentionPercent: retentionPercentForSiigo,
       customerIdentification: customer.document_number,
       customerBranchOffice: customer.siigo_branch_office,
