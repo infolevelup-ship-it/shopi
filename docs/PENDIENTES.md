@@ -1098,6 +1098,32 @@ Mapa aplicado, con las dos decisiones que lo sostienen:
 - [ ] **Nequi y Daviplata no tienen tipo propio en Siigo** y hoy caen en Efectivo (1261). Si se
       quieren separados en los informes, hay que crear esos tipos en Siigo y agregarlos al mapa.
 
+## Facturación — `invalid_total_payments` por un centavo de diferencia (2026-09-28)
+
+Reportado por el equipo: pedido WOW-P-0000103 (Studio Luxury, Pitalito) no facturaba, con "Error
+creando factura en Siigo". El detalle real (guardado en `invoice_operations.error_message`, no se
+mostraba en pantalla) era `invalid_total_payments`: *"The total payments must be equal to the
+total invoice. The total invoice calculated is 2290580.05"* — nuestro pedido tenía
+`grand_total = 2290580.04`. Un centavo de diferencia.
+
+No era un error de cálculo: `orders.grand_total` se calcula en SQL con `numeric(14,2)` (aritmética
+decimal exacta) y da .04, que es matemáticamente correcto. Pero Siigo no confía en el total que le
+mandamos — **recalcula el total de la factura a partir de las mismas líneas** (`items[]`) que le
+enviamos, y ese cálculo lo hace con redondeo de punto flotante estándar línea por línea, no con
+decimal exacto. Para esta combinación de precio/15% descuento/19% IVA en 10 líneas, ese redondeo da
+.05 en vez de .04 — reproducido exacto replicando el mismo cálculo en JS (no en SQL). Cualquier
+pedido con la combinación correcta de números puede caer en este centavo de diferencia; no es
+específico de este cliente ni de este producto.
+
+**Corregido** en `web/src/lib/siigo/client.ts`: `buildSiigoInvoicePayload` ya no manda
+`payments[].value` con el total que calculó Postgres — lo calcula ahí mismo, línea por línea, con
+la misma aritmética (`computeSiigoInvoiceTotal`), a partir de los mismos `items[]` que arma el
+payload. Así los dos números salen del mismo lado del redondeo siempre, en vez de depender de que
+dos cálculos independientes (uno en SQL, otro en Siigo) coincidan por casualidad. El total que ve
+el resto de la app (`orders.grand_total`, reportes, dashboard) no cambia — sigue siendo el decimal
+exacto, que es el correcto para mostrar y sumar internamente. Solo cambió qué número se manda en
+el pago de la factura a Siigo.
+
 ## Panel de configuración: interruptores de la integración
 
 Pedido del usuario: poder cortar el envío a Siigo en una urgencia, apagar solo los inventarios, y
