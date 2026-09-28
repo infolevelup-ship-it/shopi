@@ -1022,12 +1022,15 @@ escritos en `app_settings`:
 - `siigo_seller_map` → **corregido 2026-09-28** (reportado por el equipo: "todos los pedidos
   llegan a nombre de Karina"). El mapa nunca se había llenado en `app_settings` aunque los ids ya
   estaban documentados aquí abajo — así que *toda* factura caía en el respaldo
-  `siigo_default_seller_id` (3375, Karina Noriega, cuenta admin). Migraciones 0042/0043 lo llenan
-  con las dos vendedoras que sí tienen pedidos reales: Melissa Comercial (3651) y Sandra Ayala
-  (3565). "Karina Ríos" y "Laura Gómez" son las cuentas de prueba de la Fase 1
-  (`@productoswow.test`, cero pedidos desde el 2026-09-01/02) — no llevan mapeo porque no venden de
-  verdad; si alguna vez se contrata a alguien con esos nombres, esa cuenta de prueba no debe
-  reusarse, hay que crear un usuario nuevo.
+  `siigo_default_seller_id` (3375, Karina Noriega). Migraciones 0042/0043 lo llenan con Melissa
+  Comercial (3651) y Sandra Ayala (3565), que ya venían dependiendo por error de ese respaldo.
+  Migración 0044 agrega también a **Karina Noriega**: es vendedora real además de líder del
+  equipo (por eso tiene rol ADMIN en la app) y tiene 13 pedidos propios — antes le funcionaban
+  solo por la coincidencia de que su id de Siigo es el mismo que el respaldo por defecto; ahora
+  está mapeada explícitamente, sin depender de esa coincidencia. "Karina Ríos" y "Laura Gómez" son
+  las cuentas de prueba de la Fase 1 (`@productoswow.test`, cero pedidos desde el
+  2026-09-01/02) — no llevan mapeo porque no venden de verdad; si alguna vez se contrata a alguien
+  con esos nombres, esa cuenta de prueba no debe reusarse, hay que crear un usuario nuevo.
 
 ### Equipo real: ids de Siigo y de GHL
 
