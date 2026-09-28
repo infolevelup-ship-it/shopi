@@ -1019,8 +1019,15 @@ escritos en `app_settings`:
 - `siigo_cost_center` → `86` (PÚBLICO). La cuenta también tiene 1048 SALÓN DE BELLEZA, 1049
   ESTILISTA INDEPENDIENTE y 1050 TIENDAS (inactivo), hoy sin usar.
 - `siigo_payment_types` → ver abajo.
-- `siigo_seller_map` → **no se pudo llenar**: la tabla `users` solo tiene los 4 usuarios de prueba
-  y el admin. Hay que crearlo cuando existan las vendedoras reales.
+- `siigo_seller_map` → **corregido 2026-09-28** (reportado por el equipo: "todos los pedidos
+  llegan a nombre de Karina"). El mapa nunca se había llenado en `app_settings` aunque los ids ya
+  estaban documentados aquí abajo — así que *toda* factura caía en el respaldo
+  `siigo_default_seller_id` (3375, Karina Noriega, cuenta admin). Migraciones 0042/0043 lo llenan
+  con las dos vendedoras que sí tienen pedidos reales: Melissa Comercial (3651) y Sandra Ayala
+  (3565). "Karina Ríos" y "Laura Gómez" son las cuentas de prueba de la Fase 1
+  (`@productoswow.test`, cero pedidos desde el 2026-09-01/02) — no llevan mapeo porque no venden de
+  verdad; si alguna vez se contrata a alguien con esos nombres, esa cuenta de prueba no debe
+  reusarse, hay que crear un usuario nuevo.
 
 ### Equipo real: ids de Siigo y de GHL
 
@@ -1050,8 +1057,7 @@ certeza; emparejar por nombre le asignaría las oportunidades y las facturas a q
 
 - [ ] Crear los logins en Supabase → Authentication → Users (la contraseña la elige quien la usa,
       por eso no lo hace una migración), y luego correr los dos botones del panel.
-- [ ] `siigo_seller_map` sigue pendiente: los ids de Siigo de la tabla se cargan cuando las fichas
-      existan.
+- [x] `siigo_seller_map` → llenado (ver arriba, 2026-09-28) para Melissa Comercial y Sandra Ayala.
 
 Dos huecos reales del `InvoiceService` que salieron al configurar esto, ya corregidos:
 
