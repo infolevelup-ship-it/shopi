@@ -4,8 +4,9 @@ import { PageHeader } from "@/components/ui";
 import { NewCustomerForm } from "./customer-form";
 
 // El catálogo DANE se carga en el servidor y viaja una sola vez con la
-// página: son ~140 filas y el formulario las necesita completas desde el
-// primer render para poder llenar los selectores de departamento y ciudad.
+// página: son ~1123 filas (catálogo completo, migración 0041) y el
+// formulario las necesita completas desde el primer render para poder
+// llenar los selectores de departamento y ciudad.
 export default async function NewCustomerPage({
   searchParams,
 }: {

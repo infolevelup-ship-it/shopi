@@ -1124,6 +1124,27 @@ el resto de la app (`orders.grand_total`, reportes, dashboard) no cambia — sig
 exacto, que es el correcto para mostrar y sumar internamente. Solo cambió qué número se manda en
 el pago de la factura a Siigo.
 
+## Catálogo DANE — Supabase cortaba el catálogo completo en 1000 filas (2026-09-29)
+
+Reportado por el equipo: no encontraban "Cartago, Valle del Cauca" al crear/editar un cliente.
+Cartago sí estaba en `dane_locations` (migración 0041, catálogo completo). El problema era
+`listDaneLocations()` (`web/src/lib/actions/dane.ts`): Supabase/PostgREST corta cualquier
+`select` en 1000 filas si no se pagina explícitamente, sin importar el `.order()` — es un límite
+del lado del servidor (`db-max-rows`), no de la consulta.
+
+Con el catálogo viejo (~140 filas) nunca se notó. Con el catálogo completo (1123 filas,
+migración 0041), el corte en la fila 1000 cae a mitad del departamento "Sucre" (orden
+alfabético: department, city_name) — confirmado contando filas antes de "Valle del Cauca": 1071
+de 1123. Todo lo que viene después alfabéticamente nunca llegaba al formulario: el resto de
+Sucre, **todo Tolima, todo Valle del Cauca (Cartago incluido), Vaupés y Vichada** — 4
+departamentos completos o parciales, ~123 municipios invisibles en los selectores de
+departamento/ciudad de "Nuevo cliente" y "Editar cliente" (los dos usan `listDaneLocations()`).
+
+**Corregido**: `listDaneLocations()` ahora pagina en páginas de 1000 filas (`.range()`) hasta que
+una página vuelve incompleta, en vez de un solo `select` sin límite. Sigue siendo una sola carga
+por página (no una llamada por clic), solo que ahora en 2 llamadas al servidor en vez de 1 para
+traer las 1123 filas completas.
+
 ## Panel de configuración: interruptores de la integración
 
 Pedido del usuario: poder cortar el envío a Siigo en una urgencia, apagar solo los inventarios, y
