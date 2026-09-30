@@ -1145,6 +1145,36 @@ una página vuelve incompleta, en vez de un solo `select` sin límite. Sigue sie
 por página (no una llamada por clic), solo que ahora en 2 llamadas al servidor en vez de 1 para
 traer las 1123 filas completas.
 
+## Cliente con dos registros en Siigo — Femua S.A.S no facturaba (2026-09-30)
+
+Reportado por el equipo: "Femua S.A.S (Jose Ricardo Plata)" (NIT 901191267) no dejaba facturar,
+aunque la ficha en nuestra app mostraba "Datos fiscales: Completo" y "Siigo: Sincronizado". El
+error real de Siigo era `invalid_reference`: *"The customer doesn't exist: 901191267"*.
+
+Verificado contra la cuenta real de Siigo: **este NIT tiene dos terceros distintos**, no uno:
+
+| | id en Siigo | Nombre | Activo | Sucursal | Creado |
+|---|---|---|---|---|---|
+| El que teníamos nosotros | `43e01cf9-…` | Femua S.A.S | **No** | 2 | 2020-02-14 |
+| El que usa Siigo de verdad | `f283fe7e-…` | FEMUA SAS | **Sí** | 6 | 2023-11-18 |
+
+Nuestro `customers.siigo_customer_id` apuntaba al registro viejo e inactivo, y
+`siigo_branch_office` estaba en blanco (nunca se había llenado para este cliente — el mismo hueco
+de fondo que ya quedó anotado como pendiente en la sección de Fase 7-8: la mayoría de clientes
+importados antes de la migración 0032 no tienen sucursal guardada). Al facturar sin sucursal,
+Siigo intenta emparejar sucursal 0, que no es ninguna de las dos reales (2 ni 6) — por eso "no
+existe", aunque si existe, solo que en otra sucursal y bajo otro registro.
+
+**Corregido en los datos** (no hubo que tocar código — la lógica de `customerBranchOffice` ya
+existe desde el fix de branch_office de esta misma semana): se actualizó el cliente para apuntar
+al tercero activo (`f283fe7e-…`) con `siigo_branch_office = 6`.
+
+**Esto es el mismo hueco de fondo, no uno nuevo**: el backlog de `siigo_branch_office` en blanco
+para la mayoría de clientes importados (anotado en Fase 7-8) va a seguir produciendo este mismo
+síntoma — "no deja facturar", "el cliente no existe" — cliente por cliente, cada vez que alguien
+con sucursal duplicada intente facturar por primera vez. Sigue pendiente decidir si se hace el
+backfill general (arreglar todos de una vez) o se sigue corrigiendo uno por uno según se reporten.
+
 ## Panel de configuración: interruptores de la integración
 
 Pedido del usuario: poder cortar el envío a Siigo en una urgencia, apagar solo los inventarios, y
