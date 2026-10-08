@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/auth";
 import { getProductsByIds } from "@/lib/actions/products";
 import { QuoteForm, type QuoteFormLine } from "@/components/quote-form";
 import type { PriceList } from "@/lib/ui/fiscal";
@@ -18,13 +19,16 @@ export default async function EditQuotePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: quote } = await supabase
-    .from("quotes")
-    .select(
-      "id, quote_number, status, price_list, payment_method, retention_percent, valid_until, notes, customer:customers(id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, phone, status, responsible_user_id)",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: quote }, profile] = await Promise.all([
+    supabase
+      .from("quotes")
+      .select(
+        "id, quote_number, status, price_list, payment_method, retention_percent, valid_until, notes, customer:customers(id, customer_type, document_type, document_number, legal_name, first_name, last_name, commercial_name, phone, status, responsible_user_id)",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    getCurrentProfile(),
+  ]);
 
   if (!quote) notFound();
   if (!EDITABLES.includes(quote.status)) redirect(`/quotes/${id}`);
@@ -57,6 +61,7 @@ export default async function EditQuotePage({
           publico: p?.price_public ?? null,
           profesional: p?.price_professional ?? null,
           salon: p?.price_salon ?? null,
+          tienda: null,
         },
         quantity: Number(i.quantity),
         // El precio que se va a guardar es el del catálogo de hoy, así que es
@@ -83,6 +88,7 @@ export default async function EditQuotePage({
         validUntil: quote.valid_until ?? "",
         notes: quote.notes ?? "",
       }}
+      role={profile?.role}
     />
   );
 }

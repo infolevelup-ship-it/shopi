@@ -74,6 +74,9 @@ export default async function EditOrderPage({
           publico: p?.price_public ?? null,
           profesional: p?.price_professional ?? null,
           salon: p?.price_salon ?? null,
+          // Tienda no tiene columna de catálogo; precioDeLista() devuelve
+          // null para ella a propósito, así que no hace falta un dato real.
+          tienda: null,
         },
         priceList: lineaPriceList,
         quantity: Number(i.quantity),

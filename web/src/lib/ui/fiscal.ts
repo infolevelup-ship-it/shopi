@@ -61,10 +61,17 @@ export const CHANNELS: Option[] = [
 
 // Las tres listas de precio de `products`. El `field` es la columna real,
 // para que la pantalla de pedido pueda re-tarifar sin un mapa aparte.
+//
+// "Tienda" es distinta a propósito: no tiene `field` porque no vive en el
+// catálogo de Siigo — es un precio negociado caso por caso, así que se
+// escribe a mano por línea. Solo ADMIN/SUPERVISOR puede usarla (el
+// formulario filtra esta lista por rol) y el servidor la valida por su
+// cuenta (migración 0045): esconder la opción en pantalla no basta.
 export const PRICE_LISTS = [
   { value: "publico", label: "Público", field: "price_public" },
   { value: "profesional", label: "Profesional", field: "price_professional" },
   { value: "salon", label: "Salón", field: "price_salon" },
+  { value: "tienda", label: "Tienda", field: null },
 ] as const;
 
 export type PriceList = (typeof PRICE_LISTS)[number]["value"];

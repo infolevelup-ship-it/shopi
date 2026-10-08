@@ -131,6 +131,14 @@ export function OrderForm({
   const router = useRouter();
   const isEdit = mode === "edit";
   const verInventario = role !== "SELLER";
+  // Tienda no vive en el catálogo de Siigo: es un precio negociado a mano,
+  // así que solo ADMIN/SUPERVISOR puede ofrecerla. Esto es solo cortesía de
+  // pantalla — el servidor (migración 0045) la rechaza igual si alguien la
+  // manda sin el rol, así que esconder el botón no es la única barrera.
+  const puedeUsarTienda = role === "ADMIN" || role === "SUPERVISOR";
+  const listasDisponibles = puedeUsarTienda
+    ? PRICE_LISTS
+    : PRICE_LISTS.filter((p) => p.value !== "tienda");
 
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<
@@ -297,6 +305,9 @@ export function OrderForm({
           publico: p.price_public,
           profesional: p.price_professional,
           salon: p.price_salon,
+          // Tienda no tiene precio de catálogo que ofrecer: se escribe a
+          // mano por línea (ver el campo editable más abajo).
+          tienda: null,
         },
         priceList,
         quantity: 1,
@@ -417,7 +428,7 @@ export function OrderForm({
               label="Lista de precio para lo próximo que agregues"
               value={priceList}
               onChange={(v) => applyPriceList(v as PriceList)}
-              options={PRICE_LISTS.map((p) => ({
+              options={listasDisponibles.map((p) => ({
                 value: p.value,
                 label: p.label,
               }))}
@@ -425,10 +436,11 @@ export function OrderForm({
             <p className="s-note mt-1">
               Cada producto que agregues de ahora en adelante sale con esta
               lista. Para cambiar un producto que ya está en el pedido, usa
-              los botones de Público / Profesional / Salón en su tarjeta —
-              así puedes mezclar listas en el mismo pedido. Los precios salen
-              del catálogo y no se editan a mano; para bajar un precio, usa el
-              descuento.
+              los botones de su tarjeta — así puedes mezclar listas en el
+              mismo pedido. Los precios salen del catálogo y no se editan a
+              mano; para bajar un precio, usa el descuento.
+              {puedeUsarTienda &&
+                " Tienda es la excepción: ahí el precio se escribe a mano, caso por caso."}
             </p>
           </div>
         </SCard>
@@ -608,14 +620,31 @@ export function OrderForm({
                       />
                       {/* El precio no se escribe: lo pone el catálogo y el
                           servidor lo impone, así que un campo editable
-                          prometería algo que no se puede hacer. */}
-                      <SStatic
-                        label="Precio"
-                        value={formatMoney(l.unitPrice)}
-                        tone={
-                          precioSospechoso(l.unitPrice) ? "danger" : "normal"
-                        }
-                      />
+                          prometería algo que no se puede hacer.
+                          Tienda es la única excepción (ver puedeUsarTienda
+                          arriba): ahí SÍ se escribe a mano, porque no hay
+                          catálogo que lo resuelva — el servidor (migración
+                          0045) exige que quien guarda sea ADMIN/SUPERVISOR
+                          y un mínimo de $1.000, así que esto no es la única
+                          barrera. */}
+                      {l.priceList === "tienda" ? (
+                        <SNumber
+                          id={`price-${l.key}`}
+                          label="Precio (Tienda)"
+                          min="0"
+                          step="1"
+                          value={l.unitPrice}
+                          onChange={(v) => updateLine(l.key, { unitPrice: v })}
+                        />
+                      ) : (
+                        <SStatic
+                          label="Precio"
+                          value={formatMoney(l.unitPrice)}
+                          tone={
+                            precioSospechoso(l.unitPrice) ? "danger" : "normal"
+                          }
+                        />
+                      )}
                       <SNumber
                         id={`disc-${l.key}`}
                         label="% Desc."
@@ -637,8 +666,14 @@ export function OrderForm({
                       <p className="mb-1 text-xs font-medium text-text-soft">
                         Lista de precio de este producto
                       </p>
-                      <div className="grid grid-cols-3 gap-1">
-                        {PRICE_LISTS.map((pl) => (
+                      <div
+                        className={`grid gap-1 ${
+                          listasDisponibles.length === 4
+                            ? "grid-cols-4"
+                            : "grid-cols-3"
+                        }`}
+                      >
+                        {listasDisponibles.map((pl) => (
                           <button
                             key={pl.value}
                             type="button"
@@ -661,15 +696,17 @@ export function OrderForm({
                         nadie lo note, y se cotizaría de más. */}
                     {precioSospechoso(l.unitPrice) && (
                       <p className="mt-2 text-xs font-semibold text-danger">
-                        ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}. En
-                        Siigo este producto quedó con un precio de relleno en
-                        esta lista. Si lo facturas así, sale una factura
-                        electrónica por ese valor y solo se corrige con nota
-                        crédito. Consúltalo antes de enviar a bodega.
+                        ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}.{" "}
+                        {l.priceList === "tienda"
+                          ? "Revisa que no sea un error de tecleo."
+                          : "En Siigo este producto quedó con un precio de relleno en esta lista."}{" "}
+                        Si lo facturas así, sale una factura electrónica por
+                        ese valor y solo se corrige con nota crédito.
+                        Consúltalo antes de enviar a bodega.
                       </p>
                     )}
 
-                    {l.prices[l.priceList] === null && (
+                    {l.priceList !== "tienda" && l.prices[l.priceList] === null && (
                       <p className="mt-2 text-xs font-medium text-warning">
                         ⚠ Este producto no tiene precio en la lista{" "}
                         {PRICE_LISTS.find((p) => p.value === l.priceList)?.label}.

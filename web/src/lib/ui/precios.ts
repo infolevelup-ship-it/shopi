@@ -19,14 +19,21 @@ type ListasDePrecio = {
 };
 
 /**
- * El mismo criterio que `catalog_unit_price` en la base, que es quien manda:
- * si la lista elegida no tiene precio, se cae a la pública.
+ * El mismo criterio que `catalog_unit_price`/`resolve_unit_price` en la
+ * base, que son quienes mandan: si la lista elegida no tiene precio, se cae
+ * a la pública.
  *
  * Tiene que ser idéntico a propósito. Si la pantalla mostrara un precio y el
  * servidor guardara otro, la vendedora vería un total y el cliente recibiría
  * una factura distinta, sin ningún error de por medio.
+ *
+ * "Tienda" es la excepción: no tiene precio de catálogo que ofrecer — el
+ * valor lo escribe a mano quien arma el pedido, así que acá se devuelve
+ * `null` en vez de inventar uno (ver `resolve_unit_price` en la migración
+ * 0045, que hace lo mismo del lado del servidor).
  */
 export function precioDeLista(p: ListasDePrecio, lista: string | null | undefined): number | null {
+  if (lista === "tienda") return null;
   if (lista === "profesional") return p.price_professional ?? p.price_public;
   if (lista === "salon") return p.price_salon ?? p.price_public;
   return p.price_public;

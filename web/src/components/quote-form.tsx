@@ -70,15 +70,25 @@ export function QuoteForm({
   quoteNumber,
   preselectedCustomerId,
   initial,
+  role,
 }: {
   mode: "create" | "edit";
   quoteId?: string;
   quoteNumber?: string;
   preselectedCustomerId?: string | null;
   initial?: QuoteFormInitial;
+  /** Igual que en order-form.tsx: decide si Tienda aparece en el selector. */
+  role?: string | null;
 }) {
   const isEdit = mode === "edit";
   const router = useRouter();
+  // Tienda no vive en el catálogo de Siigo: es un precio negociado a mano,
+  // así que solo ADMIN/SUPERVISOR puede ofrecerla. Cortesía de pantalla
+  // nada más — el servidor (migración 0045) la rechaza igual sin el rol.
+  const puedeUsarTienda = role === "ADMIN" || role === "SUPERVISOR";
+  const listasDisponibles = puedeUsarTienda
+    ? PRICE_LISTS
+    : PRICE_LISTS.filter((p) => p.value !== "tienda");
 
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<CustomerSearchResult[]>([]);
@@ -146,6 +156,8 @@ export function QuoteForm({
           publico: p.price_public,
           profesional: p.price_professional,
           salon: p.price_salon,
+          // Tienda no tiene precio de catálogo: se escribe a mano.
+          tienda: null,
         },
         quantity: 1,
         unitPrice: precioDeLista(p, priceList) ?? 0,
@@ -244,12 +256,14 @@ export function QuoteForm({
             label="Lista de precio"
             value={priceList}
             onChange={(v) => applyPriceList(v as PriceList)}
-            options={PRICE_LISTS.map((p) => ({ value: p.value, label: p.label }))}
+            options={listasDisponibles.map((p) => ({ value: p.value, label: p.label }))}
           />
           <p className="s-note mt-1">
             Cambiarla vuelve a poner el precio de esa lista en los productos ya agregados. Los
             precios salen del catálogo y no se editan a mano; para bajar un precio, usa el
             descuento.
+            {puedeUsarTienda &&
+              " Tienda es la excepción: ahí el precio de cada producto se escribe a mano."}
           </p>
         </SCard>
 
@@ -365,12 +379,26 @@ export function QuoteForm({
                     value={l.quantity}
                     onChange={(v) => updateLine(l.key, { quantity: v })}
                   />
-                  {/* Igual que en el pedido: el precio lo pone el catálogo. */}
-                  <SStatic
-                    label="Precio"
-                    value={formatMoney(l.unitPrice)}
-                    tone={precioSospechoso(l.unitPrice) ? "danger" : "normal"}
-                  />
+                  {/* Igual que en el pedido: el precio lo pone el catálogo,
+                      excepto en Tienda, que se escribe a mano (el servidor,
+                      migración 0045, exige ADMIN/SUPERVISOR y un mínimo de
+                      $1.000, así que esto no es la única barrera). */}
+                  {priceList === "tienda" ? (
+                    <SNumber
+                      id={`price-${l.key}`}
+                      label="Precio (Tienda)"
+                      min="0"
+                      step="1"
+                      value={l.unitPrice}
+                      onChange={(v) => updateLine(l.key, { unitPrice: v })}
+                    />
+                  ) : (
+                    <SStatic
+                      label="Precio"
+                      value={formatMoney(l.unitPrice)}
+                      tone={precioSospechoso(l.unitPrice) ? "danger" : "normal"}
+                    />
+                  )}
                   <SNumber
                     id={`disc-${l.key}`}
                     label="% Desc."
@@ -383,14 +411,18 @@ export function QuoteForm({
                 </div>
                 {precioSospechoso(l.unitPrice) && (
                   <p className="mt-2 text-xs font-semibold text-danger">
-                    ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}. En Siigo quedó un precio de
-                    relleno en esta lista. Cotizar así compromete ese valor con el cliente.
+                    ⚠ Precio sospechoso: {formatMoney(l.unitPrice)}.{" "}
+                    {priceList === "tienda"
+                      ? "Revisa que no sea un error de tecleo."
+                      : "En Siigo quedó un precio de relleno en esta lista."}{" "}
+                    Cotizar así compromete ese valor con el cliente.
                   </p>
                 )}
 
                 {/* Mismo aviso que en el pedido: en Siigo no todos los
-                    productos tienen las tres listas cargadas. */}
-                {l.prices[priceList] === null && (
+                    productos tienen las tres listas cargadas. No aplica a
+                    Tienda, que nunca tiene precio de catálogo a propósito. */}
+                {priceList !== "tienda" && l.prices[priceList] === null && (
                   <p className="mt-2 text-xs font-medium text-warning">
                     ⚠ Sin precio en la lista{" "}
                     {PRICE_LISTS.find((p) => p.value === priceList)?.label}. El precio viene de
